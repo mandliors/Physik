@@ -1,0 +1,4 @@
+namespace physics {
+	
+	void printHello();
+}
