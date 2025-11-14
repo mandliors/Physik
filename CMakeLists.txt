@@ -30,14 +30,6 @@ else()
     )
 endif()
 
-# create source groups for vs
-foreach(FILE ${ENGINE_SOURCES})
-    file(RELATIVE_PATH REL_FILE ${CMAKE_CURRENT_SOURCE_DIR}/src ${FILE})
-    get_filename_component(DIR ${REL_FILE} PATH)
-    string(REPLACE "/" "\\" DIR_WIN ${DIR})
-    source_group("${DIR_WIN}" FILES ${FILE})
-endforeach()
-
 # expose headers in src to consumers
 target_include_directories(${PROJECT_NAME}
     PUBLIC
