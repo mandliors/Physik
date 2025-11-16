@@ -1,4 +1,0 @@
-namespace physics {
-	
-	void printHello();
-}

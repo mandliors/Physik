@@ -4,6 +4,16 @@ project(Physik VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(FetchContent)
+
+# fetch glm
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG 0.9.9.8
+)
+FetchContent_MakeAvailable(glm)
+
 # add files recursively
 file(GLOB_RECURSE ENGINE_SOURCES
     CONFIGURE_DEPENDS
@@ -15,23 +25,24 @@ file(GLOB_RECURSE ENGINE_SOURCES
 add_library(${PROJECT_NAME} STATIC ${ENGINE_SOURCES})
 
 # add compile flags
-if (MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE
-        /W4
-        /WX
-    )
-else()
-    target_compile_options(${PROJECT_NAME} PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wconversion
-        -Werror
-    )
-endif()
+#if (MSVC)
+#    target_compile_options(${PROJECT_NAME} PRIVATE
+#        /W4
+#        /WX
+#    )
+#else()
+#    target_compile_options(${PROJECT_NAME} PRIVATE
+#        -Wall
+#        -Wextra
+#        -Wpedantic
+#        -Wconversion
+#        -Werror
+#    )
+#endif()
 
 # expose headers in src to consumers
 target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+	${glm_SOURCE_DIR}
 )
