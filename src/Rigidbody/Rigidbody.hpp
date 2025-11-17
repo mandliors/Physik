@@ -12,6 +12,13 @@ struct Rigidbody
 	Rigidbody();
 
 	void CollideWith(Rigidbody& other);
+
+	void CalculateDerivedQuantities();
+	void CalculateStatePrime(
+		glm::vec3& positionPrime, glm::quat& orientationPrime,
+		glm::vec3& linearMomentumPrime, glm::vec3& angularMomentumPrime
+	) const;
+
 	void ClearForces();
 	void ApplyForces();
 
@@ -29,10 +36,10 @@ public:
 	glm::vec3 angularMomentum;
 
 	// derived quantities
-	/*glm::mat3 thetaInv;
+	glm::mat3 thetaInv;
 	glm::mat3 rotationMat;
 	glm::vec3 velocity;
-	glm::vec3 angularVelocity;*/
+	glm::vec3 angularVelocity;
 
 	// computed quantities
 	glm::vec3 force;
