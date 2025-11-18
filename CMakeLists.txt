@@ -6,13 +6,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 
-# fetch glm
+# fetch Eigen
 FetchContent_Declare(
-    glm
-    GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG 0.9.9.8
+  eigen
+  GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+  GIT_TAG        master
+  GIT_SHALLOW    TRUE
 )
-FetchContent_MakeAvailable(glm)
+set(EIGEN_BUILD_TESTING OFF CACHE BOOL "Disable Eigen tests" FORCE)
+set(EIGEN_MPL2_ONLY ON CACHE BOOL "Use MPL2-only parts" FORCE)
+
+FetchContent_MakeAvailable(eigen)
 
 # add files recursively
 file(GLOB_RECURSE ENGINE_SOURCES
@@ -44,5 +48,6 @@ add_library(${PROJECT_NAME} STATIC ${ENGINE_SOURCES})
 target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-	${glm_SOURCE_DIR}
 )
+
+target_link_libraries(Physik PUBLIC Eigen3::Eigen)

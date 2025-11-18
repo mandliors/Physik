@@ -1,24 +1,24 @@
 #include "Rigidbody/Rigidbody.hpp"
-#include "Colliders/CollisionInfo.hpp"
+#include "Collision/CollisionInfo.hpp"
 
 Rigidbody::Rigidbody()
 	: mass(1.0),
-	  centerOfMass(0.0f),
-	  thetaBody(1.0f),
-	  thetaBodyInv(1.0f),
+	  centerOfMass(3),
+	  thetaBody(3, 3),
+	  thetaBodyInv(3, 3),
 
-	  position(0.0f),
-	  orientation(1.0f, 0.0f, 0.0f, 0.0f),
-	  linearMomentum(0.0f),
-	  angularMomentum(0.0f),
+	  position(3),
+	  orientation(1.0, 0.0, 0.0, 0.0),
+	  linearMomentum(3),
+	  angularMomentum(3),
 
-	  thetaInv(1.0f),
-	  rotationMat(1.0f),
-	  velocity(0.0f),
-	  angularVelocity(0.0f),
+	  thetaInv(3, 3),
+	  rotationMat(3, 3),
+	  velocity(3),
+	  angularVelocity(3),
 
-	  force(0.0f),
-	  torque(0.0f)
+	  force(3),
+	  torque(3)
 {
 }
 
@@ -38,27 +38,35 @@ void Rigidbody::CollideWith(Rigidbody &other)
 
 void Rigidbody::CalculateDerivedQuantities()
 {
-	thetaInv = rotationMat * thetaBodyInv * glm::transpose(rotationMat);
-	rotationMat = glm::mat3_cast(orientation);
+	thetaInv = rotationMat * thetaBodyInv * rotationMat.transpose();
+	rotationMat = orientation.toRotationMatrix();
 	velocity = linearMomentum / static_cast<float>(mass);
 	angularVelocity = thetaInv * angularMomentum;
 }
-void Rigidbody::CalculateStatePrime(
-	glm::vec3 &positionPrime, glm::quat &orientationPrime,
-	glm::vec3 &linearMomentumPrime, glm::vec3 &angularMomentumPrime) const
+void Rigidbody::CalculateStateDot(
+	Eigen::Vector3d &positionDot, Eigen::Quaterniond &orientationDot,
+	Eigen::Vector3d &linearMomentumDot, Eigen::Vector3d &angularMomentumDot) const
 {
-	positionPrime = velocity;
-	orientationPrime = 0.5f * glm::quat(0.0f, angularVelocity) * orientation;
-	linearMomentumPrime = force;
-	angularMomentumPrime = torque;
+	positionDot = velocity;
+
+	orientationDot = Eigen::Quaterniond(0.0, angularVelocity.x(), angularVelocity.y(), angularVelocity.z()) * orientation;
+	orientationDot.coeffs() *= 0.5;
+
+	linearMomentumDot = force;
+	angularMomentumDot = torque;
 }
 
 void Rigidbody::ClearForces()
 {
-	force = glm::vec3(0.0f);
-	torque = glm::vec3(0.0f);
+	force = Eigen::Vector3d(3);
+	torque = Eigen::Vector3d(3);
 }
 
 void Rigidbody::ApplyForces()
 {
+}
+
+Eigen::Vector3d Rigidbody::GetPointVelocity(const Eigen::Vector3d &point) const
+{
+	return velocity + angularVelocity.cross(point - position);
 }
