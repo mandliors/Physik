@@ -9,6 +9,7 @@ struct Contact
     Contact(Rigidbody &a, Rigidbody &b);
 
     bool IsColliding() const;
+    bool IsResting() const;
     void DoCollisionResponse(float restitutionCoefficient);
     Eigen::Vector3d ComputeNDot() const;
 

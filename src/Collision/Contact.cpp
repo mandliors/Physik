@@ -7,7 +7,7 @@ Contact::Contact(Rigidbody &a, Rigidbody &b)
 
 bool Contact::IsColliding() const
 {
-    static constexpr float COLLISION_EPSILON = 0.01f;
+    static constexpr double COLLISION_EPSILON = 0.01;
 
     auto paVel = a.GetPointVelocity(position);
     auto pbVel = b.GetPointVelocity(position);
@@ -16,42 +16,55 @@ bool Contact::IsColliding() const
     return relVel.dot(normal) < -COLLISION_EPSILON;
 }
 
+bool Contact::IsResting() const
+{
+#define COLLISION_EPSILON 0.01
+
+    auto paVel = a.GetPointVelocity(position);
+    auto pbVel = b.GetPointVelocity(position);
+    auto relVel = pbVel - paVel;
+
+    return abs(relVel.dot(normal)) <= COLLISION_EPSILON;
+#undef COLLISION_EPSILON
+}
+
 void Contact::DoCollisionResponse(float restitutionCoefficient)
 {
     auto paVel = a.GetPointVelocity(position);
     auto pbVel = b.GetPointVelocity(position);
     auto relVel = pbVel - paVel;
 
-    auto ra = position - a.position;
-    auto rb = position - b.position;
+    auto ra = position - a.state.position;
+    auto rb = position - b.state.position;
 
-    float velAlongNormal = normal.dot(relVel);
-    float numerator = -(1.0f + restitutionCoefficient) * velAlongNormal;
+    double velAlongNormal = normal.dot(relVel);
+    double numerator = -(1.0 + restitutionCoefficient) * velAlongNormal;
 
-    float term1 = 1.0f / a.mass;
-    float term2 = 1.0f / b.mass;
-    float term3 = normal.dot((a.thetaInv * (ra.cross(normal))).cross(ra));
-    float term4 = normal.dot((b.thetaInv * (rb.cross(normal))).cross(rb));
+    double term1 = 1.0 / a.constants.mass;
+    double term2 = 1.0 / b.constants.mass;
+    double term3 = normal.dot((a.derived.thetaInv * (ra.cross(normal))).cross(ra));
+    double term4 = normal.dot((b.derived.thetaInv * (rb.cross(normal))).cross(rb));
 
-    float j = numerator / (term1 + term2 + term3 + term4);
+    double j = numerator / (term1 + term2 + term3 + term4);
     auto impulse = j * normal;
 
-    a.linearMomentum += impulse;
-    b.linearMomentum -= impulse;
-    a.angularMomentum += ra.cross(impulse);
-    b.angularMomentum -= rb.cross(impulse);
+    a.state.linearMomentum += impulse;
+    b.state.linearMomentum -= impulse;
+    a.state.angularMomentum += ra.cross(impulse);
+    b.state.angularMomentum -= rb.cross(impulse);
 
-    a.velocity = a.linearMomentum / static_cast<float>(a.mass);
-    a.angularVelocity = a.thetaInv * a.angularMomentum;
+    // TODO: recalculating velocty and angularvelocity might be enough
+    a.CalculateDerivedQuantities();
+    b.CalculateDerivedQuantities();
 }
 
 Eigen::Vector3d Contact::ComputeNDot() const
 {
     if (isVertexFace)
-        return b.angularVelocity.cross(normal);
+        return b.derived.angularVelocity.cross(normal);
 
-    auto eadot = a.angularVelocity.cross(edgeA);
-    auto ebdot = b.angularVelocity.cross(edgeB);
+    auto eadot = a.derived.angularVelocity.cross(edgeA);
+    auto ebdot = b.derived.angularVelocity.cross(edgeB);
 
     auto n = edgeA.cross(edgeB);
     double nLength = n.norm();

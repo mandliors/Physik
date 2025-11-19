@@ -1,59 +1,45 @@
 #include "Rigidbody/Rigidbody.hpp"
-#include "Collision/CollisionInfo.hpp"
+
+static Eigen::Quaterniond operator*(double v, const Eigen::Quaterniond &q);
 
 Rigidbody::Rigidbody()
-	: mass(1.0),
-	  centerOfMass(3),
-	  thetaBody(3, 3),
-	  thetaBodyInv(3, 3),
-
-	  position(3),
-	  orientation(1.0, 0.0, 0.0, 0.0),
-	  linearMomentum(3),
-	  angularMomentum(3),
-
-	  thetaInv(3, 3),
-	  rotationMat(3, 3),
-	  velocity(3),
-	  angularVelocity(3),
-
-	  force(3),
-	  torque(3)
+	: constants{
+		  1.0, Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Matrix3d::Identity(), Eigen::Matrix3d::Identity()},
+	  state{Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0)}, derived{Eigen::Matrix3d::Identity(), Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0)}, accumForce(3), accumTorque(3)
 {
-}
-
-void Rigidbody::CollideWith(Rigidbody &other)
-{
-	std::vector<CollisionInfo> collisions;
-	for (Collider &colliderA : colliders)
-	{
-		for (Collider &colliderB : other.colliders)
-		{
-			CollisionInfo info = colliderA.CollideWith(colliderB);
-			if (info.isColliding)
-				collisions.push_back(info);
-		}
-	}
 }
 
 void Rigidbody::CalculateDerivedQuantities()
 {
-	thetaInv = rotationMat * thetaBodyInv * rotationMat.transpose();
-	rotationMat = orientation.toRotationMatrix();
-	velocity = linearMomentum / static_cast<float>(mass);
-	angularVelocity = thetaInv * angularMomentum;
+	derived.thetaInv = derived.rotationMat * constants.thetaBodyInv * derived.rotationMat.transpose();
+	derived.rotationMat = state.orientation.toRotationMatrix();
+	derived.velocity = state.linearMomentum / static_cast<float>(constants.mass);
+	derived.angularVelocity = derived.thetaInv * state.angularMomentum;
 }
-void Rigidbody::CalculateStateDot(
-	Eigen::Vector3d &positionDot, Eigen::Quaterniond &orientationDot,
-	Eigen::Vector3d &linearMomentumDot, Eigen::Vector3d &angularMomentumDot) const
+
+Rigidbody::StateDot Rigidbody::CalculateStateDot() const
 {
-	positionDot = velocity;
+	return StateDot{
+		derived.velocity,
+		0.5 * Eigen::Quaterniond(0.0, derived.angularVelocity.x(), derived.angularVelocity.y(), derived.angularVelocity.z()) * state.orientation,
+		force,
+		torque};
+}
 
-	orientationDot = Eigen::Quaterniond(0.0, angularVelocity.x(), angularVelocity.y(), angularVelocity.z()) * orientation;
-	orientationDot.coeffs() *= 0.5;
+void Rigidbody::Step(const OdeSolver &solver, double deltaTime)
+{
+	State endState;
 
-	linearMomentumDot = force;
-	angularMomentumDot = torque;
+	double *y0 = reinterpret_cast<double *>(&state);
+	double *yend = reinterpret_cast<double *>(&endState);
+
+	solver.Solve(y0, yend, sizeof(State) / sizeof(double), 0.0, deltaTime, deltaTime, [this](double t, double *y, double *ydot)
+				 {
+							// calculate forces at time t
+							StateDot stateDot = CalculateStateDot();
+							std::memcpy(ydot, reinterpret_cast<double *>(&stateDot), sizeof(StateDot)); });
+
+	state = endState;
 }
 
 void Rigidbody::ClearForces()
@@ -62,11 +48,12 @@ void Rigidbody::ClearForces()
 	torque = Eigen::Vector3d(3);
 }
 
-void Rigidbody::ApplyForces()
-{
-}
-
 Eigen::Vector3d Rigidbody::GetPointVelocity(const Eigen::Vector3d &point) const
 {
-	return velocity + angularVelocity.cross(point - position);
+	return derived.velocity + derived.angularVelocity.cross(point - state.position);
+}
+
+static Eigen::Quaterniond operator*(double v, const Eigen::Quaterniond &q)
+{
+	return Eigen::Quaterniond(q.w() * v, q.x() * v, q.y() * v, q.z() * v);
 }
