@@ -47,14 +47,19 @@ void Rigidbody::Step(const OdeSolver &solver, double deltaTime)
 				 {
 							StateDot stateDot = CalculateStateDot();
 							std::memcpy(ydot, reinterpret_cast<double *>(&stateDot), sizeof(StateDot)); });
+
+	endState.orientation.normalize();
 	state = endState;
 }
 
 void Rigidbody::ApplyForces()
 {
-	static constexpr double gravityScale = 0.2;
+	static constexpr double gravityScale = 0.4;
+	static auto torqueImpulse = Eigen::Vector3d(10, 30, -15);
+
 	force = Eigen::Vector3d(0.0, -9.81 / constants.inverseMass * gravityScale, 0.0);
-	torque = Eigen::Vector3d(0.2, 1.0, -0.3);
+	torque = torqueImpulse;
+	torqueImpulse.setZero();
 }
 void Rigidbody::ClearForces()
 {
