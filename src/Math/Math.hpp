@@ -6,7 +6,7 @@
 
 #include <vector>
 
-void ComputeContactForces(const std::vector<Contact> &restingContacts, double t);
+void SolveRestingContacts(const std::vector<Contact> &restingContacts, double t);
 
 Eigen::VectorXd ComputeBVector(const std::vector<Contact> &contacts);
 

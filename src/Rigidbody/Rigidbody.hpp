@@ -10,9 +10,7 @@ struct Rigidbody
 {
 	struct ConstantQuantities
 	{
-		double mass;
-		Eigen::Vector3d centerOfMass;
-		Eigen::Matrix3d thetaBody;
+		double inverseMass;
 		Eigen::Matrix3d thetaBodyInv;
 	};
 
@@ -40,15 +38,15 @@ struct Rigidbody
 	};
 
 public:
-	Rigidbody();
+	Rigidbody(const ConstantQuantities &constants);
 
 	void CalculateDerivedQuantities();
 	StateDot CalculateStateDot() const;
 
 	void Step(const OdeSolver &solver, double deltaTime);
 
-	void ClearForces();
 	void ApplyForces();
+	void ClearForces();
 
 	Eigen::Vector3d GetPointVelocity(const Eigen::Vector3d &point) const;
 
@@ -56,9 +54,6 @@ public:
 	ConstantQuantities constants;
 	State state;
 	DerivedQuantities derived;
-
-	Eigen::Vector3d accumForce;
-	Eigen::Vector3d accumTorque;
 
 	Eigen::Vector3d force;
 	Eigen::Vector3d torque;

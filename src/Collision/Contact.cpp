@@ -1,31 +1,25 @@
 #include "Contact.hpp"
 
 Contact::Contact(Rigidbody &a, Rigidbody &b)
-    : a(a), b(b), position(3), normal(3), edgeA(3), edgeB(3), isVertexFace(false)
+    : a(a), b(b), type(Type::VertexFace)
 {
 }
 
-bool Contact::IsColliding() const
+Contact::State Contact::GetState() const
 {
     static constexpr double COLLISION_EPSILON = 0.01;
 
     auto paVel = a.GetPointVelocity(position);
     auto pbVel = b.GetPointVelocity(position);
     auto relVel = pbVel - paVel;
+    double relVelAlongNormal = relVel.dot(normal);
 
-    return relVel.dot(normal) < -COLLISION_EPSILON;
-}
-
-bool Contact::IsResting() const
-{
-#define COLLISION_EPSILON 0.01
-
-    auto paVel = a.GetPointVelocity(position);
-    auto pbVel = b.GetPointVelocity(position);
-    auto relVel = pbVel - paVel;
-
-    return abs(relVel.dot(normal)) <= COLLISION_EPSILON;
-#undef COLLISION_EPSILON
+    if (relVelAlongNormal > COLLISION_EPSILON)
+        return State::Separating;
+    else if (relVelAlongNormal > -COLLISION_EPSILON)
+        return State::Resting;
+    else
+        return State::Colliding;
 }
 
 void Contact::DoCollisionResponse(float restitutionCoefficient)
@@ -40,8 +34,8 @@ void Contact::DoCollisionResponse(float restitutionCoefficient)
     double velAlongNormal = normal.dot(relVel);
     double numerator = -(1.0 + restitutionCoefficient) * velAlongNormal;
 
-    double term1 = 1.0 / a.constants.mass;
-    double term2 = 1.0 / b.constants.mass;
+    double term1 = a.constants.inverseMass;
+    double term2 = b.constants.inverseMass;
     double term3 = normal.dot((a.derived.thetaInv * (ra.cross(normal))).cross(ra));
     double term4 = normal.dot((b.derived.thetaInv * (rb.cross(normal))).cross(rb));
 
@@ -60,7 +54,7 @@ void Contact::DoCollisionResponse(float restitutionCoefficient)
 
 Eigen::Vector3d Contact::ComputeNDot() const
 {
-    if (isVertexFace)
+    if (type == Type::VertexFace)
         return b.derived.angularVelocity.cross(normal);
 
     auto eadot = a.derived.angularVelocity.cross(edgeA);

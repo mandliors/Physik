@@ -6,10 +6,22 @@
 
 struct Contact
 {
+    enum class State
+    {
+        Separating = 0,
+        Colliding,
+        Resting
+    };
+    enum class Type
+    {
+        VertexFace = 0,
+        EdgeEdge
+    };
+
+public:
     Contact(Rigidbody &a, Rigidbody &b);
 
-    bool IsColliding() const;
-    bool IsResting() const;
+    State GetState() const;
     void DoCollisionResponse(float restitutionCoefficient);
     Eigen::Vector3d ComputeNDot() const;
 
@@ -21,5 +33,5 @@ struct Contact
     Eigen::Vector3d edgeA;
     Eigen::Vector3d edgeB;
 
-    bool isVertexFace;
+    Type type;
 };

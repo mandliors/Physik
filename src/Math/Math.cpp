@@ -1,7 +1,7 @@
 #include "Math/Math.hpp"
 #include "Math/eiquadprog.hpp"
 
-void ComputeContactForces(const std::vector<Contact> &restingContacts, double t)
+void SolveRestingContacts(const std::vector<Contact> &restingContacts, double t)
 {
     const size_t nContacts = restingContacts.size();
 
@@ -16,11 +16,11 @@ void ComputeContactForces(const std::vector<Contact> &restingContacts, double t)
         auto &B = restingContacts[i].b;
         auto fn = fVec[i] * restingContacts[i].normal;
 
-        A.accumForce += fn;
-        A.accumTorque += (restingContacts[i].position - A.state.position).cross(fn);
+        A.force += fn;
+        A.torque += (restingContacts[i].position - A.state.position).cross(fn);
 
-        B.accumForce -= fn;
-        B.accumTorque -= (restingContacts[i].position - B.state.position).cross(fn);
+        B.force -= fn;
+        B.torque -= (restingContacts[i].position - B.state.position).cross(fn);
     }
 }
 
@@ -37,18 +37,18 @@ Eigen::VectorXd ComputeBVector(const std::vector<Contact> &contacts)
         const auto &ra = c.position - A.state.position;
         const auto &rb = c.position - B.state.position;
 
-        const auto &forceExtA = A.accumForce;
-        const auto &forceExtB = B.accumForce;
-        const auto &torqueExtA = A.accumTorque;
-        const auto &torqueExtB = B.accumTorque;
+        const auto &forceExtA = A.force;
+        const auto &forceExtB = B.force;
+        const auto &torqueExtA = A.torque;
+        const auto &torqueExtB = B.torque;
 
         auto aExtPart = Eigen::Vector3d();
         auto aVelPart = Eigen::Vector3d();
         auto bExtPart = Eigen::Vector3d();
         auto bVelPart = Eigen::Vector3d();
 
-        aExtPart = forceExtA / A.constants.mass + ((A.derived.thetaInv * torqueExtA).cross(ra));
-        bExtPart = forceExtB / B.constants.mass + ((B.derived.thetaInv * torqueExtB).cross(rb));
+        aExtPart = forceExtA * A.constants.inverseMass + ((A.derived.thetaInv * torqueExtA).cross(ra));
+        bExtPart = forceExtB * B.constants.inverseMass + ((B.derived.thetaInv * torqueExtB).cross(rb));
 
         aVelPart = A.derived.angularVelocity.cross(A.derived.angularVelocity.cross(ra)) +
                    (A.derived.thetaInv * A.state.angularMomentum.cross(A.derived.angularVelocity)).cross(ra);
@@ -117,10 +117,10 @@ double ComputeAAt(const Contact &ci, const Contact &cj)
         torqueOnB = (pj - B.state.position).cross(nj);
     }
 
-    auto aLinear = forceOnA / A.constants.mass;
+    auto aLinear = forceOnA * A.constants.inverseMass;
     auto aAngular = (A.derived.thetaInv * torqueOnA).cross(ra);
 
-    auto bLinear = forceOnB / B.constants.mass;
+    auto bLinear = forceOnB * B.constants.inverseMass;
     auto bAngular = (B.derived.thetaInv * torqueOnB).cross(rb);
 
     return ni.dot((aLinear + aAngular) - (bLinear + bAngular));
