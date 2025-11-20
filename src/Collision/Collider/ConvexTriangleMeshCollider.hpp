@@ -7,8 +7,8 @@
 
 class ConvexTriangleMeshCollider : BaseCollider {
 public:
-	const std::vector<Eigen::Vector3d>& vertices;
-	const std::vector<long>& triangles;	//a flattened array of integer triplets
+	const std::vector<Eigen::Vector3d> vertices;
+	const std::vector<long> triangles;	//a flattened array of integer triplets
 
 	ConvexTriangleMeshCollider(const std::vector<Eigen::Vector3d>& vertices, const std::vector<long>& triangles);
 
