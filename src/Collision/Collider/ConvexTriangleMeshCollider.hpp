@@ -14,8 +14,8 @@ public:
 
 	void CalculateBoundingSphere();
 
-	//if a plane is found, outPlane is overwritten and the return value is true
-	//else the return value is false and the outPlane is touch starved
-	//other is considered as collider b in the separating plane, that is the normal will point from other to this
-	bool FindSeparatingPlane(const ConvexTriangleMeshCollider& other, BaseCollider::SeparatingPlane& outPlane);
+	//returns the separation distance
+	//the most segregating axis is written in outAxis, even if the colliders overlap
+	//if absolutely no axis is found, the return value is DBL_MIN
+	double FindSeparatingAxis(const ConvexTriangleMeshCollider& other, BaseCollider::SeparatingAxis& outAxis);
 };

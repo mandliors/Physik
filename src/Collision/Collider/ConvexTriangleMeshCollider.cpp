@@ -1,6 +1,7 @@
 #include "ConvexTriangleMeshCollider.hpp"
 
 #include <math.h>
+#include <float.h>
 
 ConvexTriangleMeshCollider::ConvexTriangleMeshCollider(const std::vector<Eigen::Vector3d>& vertices, const std::vector<long>& triangles)
 	:BaseCollider(), vertices(vertices), triangles(triangles)
@@ -21,20 +22,23 @@ void ConvexTriangleMeshCollider::CalculateBoundingSphere()
 	bounds.radius = sqrt(maxSqrDistance);
 }
 
-bool IsSeparatingPlaneValidInternal(
+double CalculateAxisSeparation(
 	const std::vector<Eigen::Vector3d>& transformedVerticesA,
 	const std::vector<Eigen::Vector3d>& transformedVerticesB,
-	double planeEquationA, double planeEquationB, double planeEquationC, double planeEquationD);
+	Eigen::Vector3d axis, int& closestIndexA, int& closestIndexB);
 
-bool ConstructPlaneEquationFromEdgesInternal(
+bool GetAxisFromEdgesInternal(
 	const Eigen::Vector3d& a0, const Eigen::Vector3d& a1, const Eigen::Vector3d& b0, const Eigen::Vector3d& b1,
-	double& planeEquationA, double& planeEquationB, double& planeEquationC, double& planeEquationD);
+	Eigen::Vector3d& outAxis);
 
-bool ConvexTriangleMeshCollider::FindSeparatingPlane(const ConvexTriangleMeshCollider& other, BaseCollider::SeparatingPlane& outPlane)
+double ConvexTriangleMeshCollider::FindSeparatingAxis(const ConvexTriangleMeshCollider& other, BaseCollider::SeparatingAxis& outPlane)
 {
 	std::vector<Eigen::Vector3d> verticesA, verticesB;	//transformed vertices
-	double a, b, c, d; //equation of the current plane (abc=normal, d=-<point;normal>)
-	bool planeFound = true;
+	double maxSeparation = DBL_MIN;
+	BaseCollider::SeparatingAxis currentAxis;
+
+	if (this->triangles.size() == 0 || other.triangles.size() == 0)
+		return DBL_MIN;
 
 	//transform vertices
 	for (const auto& vertex : this->vertices)
@@ -45,59 +49,37 @@ bool ConvexTriangleMeshCollider::FindSeparatingPlane(const ConvexTriangleMeshCol
 	//check the face-vertex case
 	for (int i = 0; i < this->triangles.size(); i += 3)	//faces of collider A
 	{
-		//calculate the equation die zur aktuellen Seite gehört
+		//calculate the axis die zur aktuellen Seite gehört
 		auto planeNormal = (verticesA[this->triangles[i + 2]] - verticesA[this->triangles[i + 1]]).cross(verticesA[this->triangles[i]] - verticesA[this->triangles[i + 1]]).normalized();
-		planeNormal = -planeNormal;		//so that the normal points from b to a
-		a = planeNormal.x();
-		b = planeNormal.y();
-		c = planeNormal.z();
-		d = -planeNormal.dot(verticesA[this->triangles[i + 1]]);
+		int closestIndexA = -1, closestIndexB = -1;
 
-		//check if the vertices are on the right side
-		if (!IsSeparatingPlaneValidInternal(verticesA, verticesB, a, b, c, d))
-			continue;
-
-		//at this point, the plane is poggers
-		outPlane.a = dynamic_cast<const BaseCollider&>(*this);
-		outPlane.b = dynamic_cast<const BaseCollider&>(other);
-		outPlane.point = verticesA[this->triangles[i + 1]];
-		outPlane.normal = planeNormal;
-
-		planeFound = true;
-		break;
+		//check if the axis is based
+		double separation = CalculateAxisSeparation(verticesA, verticesB, planeNormal, closestIndexA, closestIndexB);
+		if (separation > maxSeparation)
+		{
+			maxSeparation = separation;
+			currentAxis = SeparatingAxis(&other, this, planeNormal, closestIndexB, i, i + 1, i + 2);
+		}
 	}
 
-	if (planeFound)
-		goto plane_search_skip;
 
 	for (int i = 0; i < other.triangles.size(); i += 3)	//faces of collider B
 	{
-		//calculate the equation die zur aktuellen Seite gehört
+		//calculate the axis die zur aktuellen Seite gehört
 		auto planeNormal = (verticesB[other.triangles[i + 2]] - verticesB[other.triangles[i + 1]]).cross(verticesB[other.triangles[i]] - verticesB[other.triangles[i + 1]]).normalized();
-		a = planeNormal.x();
-		b = planeNormal.y();
-		c = planeNormal.z();
-		d = -planeNormal.dot(verticesB[other.triangles[i + 1]]);
+		int closestIndexA = -1, closestIndexB = -1;
 
-		//check if the vertices are on the right side
-		if (!IsSeparatingPlaneValidInternal(verticesA, verticesB, a, b, c, d))
-			continue;
-
-		//at this point, the plane is poggers
-		outPlane.a = dynamic_cast<const BaseCollider&>(*this);
-		outPlane.b = dynamic_cast<const BaseCollider&>(other);
-		outPlane.point = verticesB[other.triangles[i + 1]];
-		outPlane.normal = planeNormal;
-
-		planeFound = true;
-		break;
+		//check if the axis is based
+		double separation = CalculateAxisSeparation(verticesA, verticesB, planeNormal, closestIndexA, closestIndexB);
+		if (separation > maxSeparation)
+		{
+			maxSeparation = separation;
+			currentAxis = SeparatingAxis(this, &other, planeNormal, closestIndexA, i, i + 1, i + 2);
+		}
 	}
 
-	if (planeFound)
-		goto plane_search_skip;
-
 	//check for the edging case
-	for (int i = 0; i < this->triangles.size() && !planeFound; i += 3)
+	for (int i = 0; i < this->triangles.size(); i += 3)
 	{
 		Eigen::Vector3d edgesInFaceA[4];//neighbouring vertices make up a gooner
 		edgesInFaceA[0] = verticesA[this->triangles[i]];
@@ -105,7 +87,7 @@ bool ConvexTriangleMeshCollider::FindSeparatingPlane(const ConvexTriangleMeshCol
 		edgesInFaceA[2] = verticesA[this->triangles[i + 2]];
 		edgesInFaceA[3] = verticesA[this->triangles[i]];
 
-		for (int j = 0; j < other.triangles.size() && !planeFound; j += 3)
+		for (int j = 0; j < other.triangles.size(); j += 3)
 		{
 			Eigen::Vector3d edgesInFaceB[4];//neighbouring vertices make up a gooner
 			edgesInFaceB[0] = verticesB[other.triangles[j]];
@@ -117,73 +99,101 @@ bool ConvexTriangleMeshCollider::FindSeparatingPlane(const ConvexTriangleMeshCol
 			{
 				int aIndex = k / 3;
 				int bIndex = k % 3;
+				Eigen::Vector3d axis;
 
-				if (ConstructPlaneEquationFromEdgesInternal(
-					edgesInFaceA[aIndex], edgesInFaceA[aIndex + 1], edgesInFaceB[bIndex], edgesInFaceB[bIndex + 1], a, b, c, d))
+				if (GetAxisFromEdgesInternal(
+					edgesInFaceA[aIndex], edgesInFaceA[aIndex + 1],
+					edgesInFaceB[bIndex], edgesInFaceB[bIndex + 1],
+					axis))	//axis exists
 				{
-					if (IsSeparatingPlaneValidInternal(verticesA, verticesB, a, b, c, d))
+					int closestA, closestB;
+					double separation = CalculateAxisSeparation(verticesA, verticesB, axis, closestA, closestB);
+					if (separation > maxSeparation)
 					{
-						outPlane.a = dynamic_cast<const BaseCollider&>(*this);
-						outPlane.b = dynamic_cast<const BaseCollider&>(other);
-						outPlane.normal = Eigen::Vector3d(a, b, c).normalized();
-						outPlane.point = edgesInFaceB[bIndex];
-
-						planeFound = true;
-						break;
+						maxSeparation = separation;
+						currentAxis = SeparatingAxis(
+							this, &other, axis,
+							this->triangles[i + aIndex], this->triangles[i + (aIndex + 1) % 3],
+							other.triangles[j + bIndex], other.triangles[j + (bIndex + 1) % 3], 69);
 					}
 				}
 			}
 		}
 	}
 
-
-plane_search_skip:
-	return planeFound;
+	return maxSeparation;
 }
 
 
-//checks if the colliders are actually separated by the plane
-bool IsSeparatingPlaneValidInternal(
+//calculates if the colliders are actually separated along the axis
+//returns the distance between the colliders along the axis (negative if there is a penetration)
+double CalculateAxisSeparation(
 	const std::vector<Eigen::Vector3d>& transformedVerticesA,
 	const std::vector<Eigen::Vector3d>& transformedVerticesB,
-	double planeEquationA, double planeEquationB, double planeEquationC, double planeEquationD)
+	Eigen::Vector3d axis, int& closestIndexA, int& closestIndexB)
 {
-	bool planeIsGay = false;
+	double minA = DBL_MAX, maxA = DBL_MIN;
+	double minB = DBL_MAX, maxB = DBL_MIN;
+	int minIndexA = -1, maxIndexA = -1;
+	int minIndexB = -1, maxIndexB = -1;
+	auto normalizedAxis = axis.normalized();
 
-	//check if all of the vertices in collider A are on the right side of the plane
-	for (const auto& vertex : transformedVerticesA)
-		if (planeEquationA * vertex.x() +
-			planeEquationB * vertex.y() +
-			planeEquationC * vertex.z() +
-			planeEquationD < 0.0)
+	if (transformedVerticesA.size() == 0 || transformedVerticesB.size() == 0)
+		return 0.0;
+
+	//calculate the min projection of the vertices in collider a
+	for (int i = 0; i < transformedVerticesA.size(); i++)
+	{
+		double proj = transformedVerticesA[i].dot(normalizedAxis);
+		if (proj < minA)
 		{
-			planeIsGay = true;
-			break;
+			minA = proj;
+			minIndexA = i;
 		}
-
-	if (planeIsGay)
-		return false;
-
-	//check if all of the vertices in collider B are on the right side of the plane
-	for (const auto& vertex : transformedVerticesB)
-		if (planeEquationA * vertex.x() +
-			planeEquationB * vertex.y() +
-			planeEquationC * vertex.z() +
-			planeEquationD > 0.0)
+		if (proj > maxA)
 		{
-			planeIsGay = true;
-			break;
+			maxA = proj;
+			maxIndexA = i;
 		}
+	}
 
-	if (planeIsGay)
-		return false;
-	return true;
+	//calculate the min projection of the vertices in collider b
+	for (int i = 0; i < transformedVerticesB.size(); i++)
+	{
+		double proj = transformedVerticesB[i].dot(normalizedAxis);
+		if (proj < minB)
+		{
+			minB = proj;
+			minIndexB = i;
+		}
+		if (proj > maxB)
+		{
+			maxB = proj;
+			maxIndexB = i;
+		}
+	}
+
+	//calculate the separation
+	double separation = minB - maxA;
+	if (minA - maxB > separation)
+	{
+		separation = minA - maxB;
+		closestIndexA = minIndexA;
+		closestIndexB = maxIndexB;
+	}
+	else
+	{
+		closestIndexA = maxIndexA;
+		closestIndexB = minIndexB;
+	}
+
+	return separation;
 }
 
-//returns false if the plane couldn't be constructed
-bool ConstructPlaneEquationFromEdgesInternal(
+//returns false if there was no axis to be found (in this case, outAxis shall not be molested)
+bool GetAxisFromEdgesInternal(
 	const Eigen::Vector3d& a0, const Eigen::Vector3d& a1, const Eigen::Vector3d& b0, const Eigen::Vector3d& b1,
-	double& planeEquationA, double& planeEquationB, double& planeEquationC, double& planeEquationD)
+	Eigen::Vector3d& outAxis)
 {
 	constexpr double MIN_VEC_SQRLENGTH = 0.0000001;
 	auto edgeA = a1 - a0;
@@ -198,10 +208,7 @@ bool ConstructPlaneEquationFromEdgesInternal(
 		if (planeNormal.dot(a0 - b0) < 0)	//normal is pointing in the wrong direction
 			planeNormal = -planeNormal;
 
-		planeEquationA = planeNormal.x();
-		planeEquationB = planeNormal.y();
-		planeEquationC = planeNormal.z();
-		planeEquationD = -planeNormal.dot(b0);
+		outAxis = planeNormal.normalized();
 		return true;
 	}
 	else
@@ -210,10 +217,7 @@ bool ConstructPlaneEquationFromEdgesInternal(
 		if (planeNormal.dot(a0 - b0) < 0)	//normal is pointing in the wrong direction
 			planeNormal = -planeNormal;
 
-		planeEquationA = planeNormal.x();
-		planeEquationB = planeNormal.y();
-		planeEquationC = planeNormal.z();
-		planeEquationD = -planeNormal.dot(b0);
+		outAxis = planeNormal.normalized();
 		return true;
 	}
 }
