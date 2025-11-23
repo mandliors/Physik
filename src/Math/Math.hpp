@@ -6,11 +6,16 @@
 
 #include <vector>
 
-void SolveRestingContacts(const std::vector<Contact> &restingContacts, double t);
+namespace Physik::Math
+{
+    void CalculateMassProperties(const Mesh &mesh, double density, Rigidbody::MassProperties &massProps);
 
-Eigen::VectorXd ComputeBVector(const std::vector<Contact> &contacts);
+    void SolveCollidingContacts(std::vector<Contact> &contacts);
+    void SolveRestingContacts(const std::vector<Contact> &restingContacts, double t);
 
-Eigen::MatrixXd ComputeAMatrix(const std::vector<Contact> &contacts);
-double ComputeAAt(const Contact &ci, const Contact &cj);
+    Eigen::VectorXd ComputeBVector(const std::vector<Contact> &contacts);
+    Eigen::MatrixXd ComputeAMatrix(const std::vector<Contact> &contacts);
+    double ComputeAAt(const Contact &ci, const Contact &cj);
 
-Eigen::VectorXd SolveQuadratic(const Eigen::MatrixXd &A, const Eigen::VectorXd &b);
+    Eigen::VectorXd SolveQuadratic(const Eigen::MatrixXd &A, const Eigen::VectorXd &b);
+}

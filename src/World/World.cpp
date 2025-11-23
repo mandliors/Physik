@@ -1,64 +1,48 @@
 #include "World.hpp"
 #include "../Math/Math.hpp"
 
-static std::vector<Contact> FindAllContacts()
+static std::vector<Physik::Contact> FindAllContacts()
 {
     return {};
 }
 
-void World::AddBody(Rigidbody *body)
+namespace Physik
 {
-    rigidbodies.push_back(body);
-}
-void World::Step(const OdeSolver &solver, double deltaTime)
-{
-    std::vector<Contact> contacts;
-
-    for (Rigidbody *body : rigidbodies)
+    void World::AddBody(Rigidbody *body)
     {
-        body->ApplyForces();
-
-        // -------- COLLISIONS --------
-        {
-            contacts = FindAllContacts();
-
-            // solve colliding contacts
-            SolveCollidingContacts(contacts);
-
-            // solve resting contacts
-            std::vector<Contact> restingContacts;
-            std::copy_if(contacts.begin(), contacts.end(), std::back_inserter(restingContacts), [](Contact c)
-                         { return c.GetState() == Contact::State::Resting; });
-            SolveRestingContacts(restingContacts, deltaTime);
-        }
-        // ----------------------------
-
-        // -------- INTEGRATION --------
-        {
-            body->CalculateDerivedQuantities();
-            body->Step(solver, deltaTime);
-        }
-        // -----------------------------
-
-        body->ClearForces();
+        rigidbodies.push_back(body);
     }
-}
-
-void World::SolveCollidingContacts(std::vector<Contact> &contacts) const
-{
-    static constexpr float RESTITUTION_COEFFICIENT = 0.5f;
-    bool collisionDetected = true;
-
-    do
+    void World::Step(const Solvers::OdeSolver &solver, double deltaTime)
     {
-        collisionDetected = false;
-        for (Contact &contact : contacts)
+        std::vector<Contact> contacts;
+
+        for (Rigidbody *body : rigidbodies)
         {
-            if (contact.GetState() == Contact::State::Colliding)
+            body->ApplyForces();
+
+            // -------- COLLISIONS --------
             {
-                contact.DoCollisionResponse(RESTITUTION_COEFFICIENT);
-                collisionDetected = true;
+                contacts = FindAllContacts();
+
+                // solve colliding contacts
+                Math::SolveCollidingContacts(contacts);
+
+                // solve resting contacts
+                std::vector<Contact> restingContacts;
+                std::copy_if(contacts.begin(), contacts.end(), std::back_inserter(restingContacts), [](Contact c)
+                             { return c.GetState() == Contact::State::Resting; });
+                Math::SolveRestingContacts(restingContacts, deltaTime);
             }
+            // ----------------------------
+
+            // -------- INTEGRATION --------
+            {
+                body->CalculateDerivedQuantities();
+                body->Step(solver, deltaTime);
+            }
+            // -----------------------------
+
+            body->ClearForces();
         }
-    } while (collisionDetected);
+    }
 }

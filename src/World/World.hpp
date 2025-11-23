@@ -4,11 +4,14 @@
 #include "Rigidbody/Rigidbody.hpp"
 #include "Collision/Contact.hpp"
 
-struct World
+namespace Physik
 {
-    void AddBody(Rigidbody *body);
-    void Step(const OdeSolver &solver, double deltaTime);
-    void SolveCollidingContacts(std::vector<Contact> &contacts) const;
+    struct World
+    {
+        void AddBody(Rigidbody *body);
+        void Step(const Solvers::OdeSolver &solver, double deltaTime);
+        void SolveCollidingContacts(std::vector<Contact> &contacts) const;
 
-    std::vector<Rigidbody *> rigidbodies;
-};
+        std::vector<Rigidbody *> rigidbodies;
+    };
+}

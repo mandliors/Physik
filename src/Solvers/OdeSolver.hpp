@@ -5,8 +5,11 @@
 #include <functional>
 #include <cstddef>
 
-struct OdeSolver
+namespace Physik::Solvers
 {
-	using dydt = std::function<void(double, double *, double *)>;
-	virtual void Solve(double *y0, double *yend, size_t len, double t0, double t1, double dt, dydt dydtFunc) const = 0;
-};
+	struct OdeSolver
+	{
+		using dydt = std::function<void(double, double *, double *)>;
+		virtual void Solve(double *y0, double *yend, size_t len, double t0, double t1, double dt, dydt dydtFunc) const = 0;
+	};
+}
