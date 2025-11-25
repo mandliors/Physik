@@ -4,6 +4,7 @@
 
 #include <map>
 #include <stdlib.h>
+#include <algorithm>
 
 class Edge {
 public:
@@ -45,11 +46,16 @@ public:
 class Face {
 public:
 	int faceIndices[3];
-	Face(int f0, int f1, int f2)
+	int alreadyVisited;
+	Eigen::Vector3d normal;
+	Face(int f0, int f1, int f2, const std::vector<Eigen::Vector3d>& vertices)
 	{
 		faceIndices[0] = f0;
 		faceIndices[1] = f1;
 		faceIndices[2] = f2;
+		alreadyVisited = false;
+
+		normal = (vertices[f2] - vertices[f1]).cross(vertices[f0] - vertices[f1]).normalized();
 	}
 
 	bool operator==(const Face& other) const
@@ -128,16 +134,23 @@ namespace Physik {
 			index = newVertexToIndex[prevIndexToVertex[index]];
 	}
 
+	void PolygonalizeTraverser(
+		Face* currentFace,
+		std::vector<int>& currentPolygon,
+		const std::map<Edge*, std::vector<Face*>>& edge2face,
+		const std::map<Face*, std::vector<Edge*>>& face2edge);
+
 	void ConvexHullCollider::Polygonalize()
 	{
 		std::vector<Edge> edges;
 		std::vector<Face> faces;
 		std::map<Edge*, std::vector<Face*>> edgeFaceMapper;
+		std::map<Face*, std::vector<Edge*>> faceEdgeMapper;
 
 		//construct helper vectors
 		for (int i = 0; i < triangles.size(); i += 3)
 		{
-			faces.push_back(Face(triangles[i], triangles[i + 1], triangles[i + 2]));
+			faces.push_back(Face(triangles[i], triangles[i + 1], triangles[i + 2], vertices));
 			edges.push_back(Edge(triangles[i], triangles[i + 1]));
 			edges.push_back(Edge(triangles[i + 1], triangles[i + 2]));
 			edges.push_back(Edge(triangles[i + 2], triangles[i]));
@@ -154,10 +167,10 @@ namespace Physik {
 			if (faces[i] == faces[i - 1])
 				faces.erase(faces.cbegin() + i);
 
-		//construct helper map
+		//construct helper maps
 		for (int i = 0; i < triangles.size(); i += 3)
 		{
-			Face face(triangles[i], triangles[i + 1], triangles[i + 2]);
+			Face face(triangles[i], triangles[i + 1], triangles[i + 2], vertices);
 			Edge edge0(triangles[i], triangles[i + 1]);
 			Edge edge1(triangles[i + 1], triangles[i + 2]);
 			Edge edge2(triangles[i + 2], triangles[i]);
@@ -168,7 +181,7 @@ namespace Physik {
 			Edge* pEdge2 = static_cast<Edge*>(bsearch(&edge2, edges.data(), edges.size(), sizeof(Edge), Edge::comparator));
 
 
-
+			//edge2face
 			if (edgeFaceMapper.contains(pEdge0))
 				edgeFaceMapper[pEdge0].push_back(pFace);
 			else
@@ -183,9 +196,89 @@ namespace Physik {
 				edgeFaceMapper[pEdge2].push_back(pFace);
 			else
 				edgeFaceMapper[pEdge2] = std::vector<Face*>{ pFace };
+
+			//face2edge
+			faceEdgeMapper[pFace] = std::vector<Edge*>{ pEdge0, pEdge1, pEdge2 };
 		}
 
-		//NOTE 4 L8R: no need for convexness check when merging triangles, because a convex hull cannot have concave polygons anyway
+		//create polygons
+		polygons.clear();
+
+		for (int i = 0; i < faces.size(); i++)
+		{
+			if (faces[i].alreadyVisited)
+				continue;
+
+			std::vector<int> polygonIndices;
+			PolygonalizeTraverser(faces.data() + i, polygonIndices, edgeFaceMapper, faceEdgeMapper);
+
+			if (polygonIndices.size() < 3)	//there is a gebasz here
+				continue;
+
+			std::vector<Eigen::Vector3d> polygonVertices;
+			for (int index : polygonIndices)
+				polygonVertices.push_back(vertices[index]);
+			polygons.push_back(PolygonFace(polygonVertices));
+		}
 	}
 
+
+	static void PolygonalizeTraverser(
+		Face* currentFace,
+		std::vector<int>& currentPolygon,
+		const std::map<Edge*, std::vector<Face*>>& edge2face,
+		const std::map<Face*, std::vector<Edge*>>& face2edge)
+	{
+		static constexpr double KINDA_PARALLEL = 0.995;
+
+		if (currentFace->alreadyVisited)
+			return;
+
+		//add index(or indices) to the polygon
+		currentFace->alreadyVisited = true;
+		if (currentPolygon.size() == 0)
+		{
+			currentPolygon.push_back(currentFace->faceIndices[0]);
+			currentPolygon.push_back(currentFace->faceIndices[1]);
+			currentPolygon.push_back(currentFace->faceIndices[2]);
+		}
+		else
+		{
+			//determine the new vertex (2 are already part of the polygon)
+			//the two that are already part of the polygon are adjacent in both shapes, but are in a different order
+			int index = -1;
+			for (int i = 0; i < 3; i++)
+				if (currentPolygon.cend() == std::find(currentPolygon.cbegin(), currentPolygon.cend(), currentFace->faceIndices[i]))
+				{
+					index = i;
+					break;
+				}
+
+			currentPolygon.insert(
+				std::find(currentPolygon.cbegin(), currentPolygon.cend(), currentFace->faceIndices[(index - 1) % 3]),
+				currentFace->faceIndices[index]
+			);
+		}
+
+		const std::vector<Edge*>& adjEdges = face2edge.at(currentFace);
+		std::vector<Face*> adjFaces;
+		for (Edge* const& pEdge : adjEdges)
+		{
+			const std::vector<Face*>& temp = edge2face.at(pEdge);
+			adjFaces.insert(adjFaces.cend(), temp.cbegin(), temp.cend());
+		}
+
+		for (Face* const& pFace : adjFaces)
+		{
+			if (pFace->alreadyVisited)
+				continue;
+
+			if (pFace->normal.dot(currentFace->normal) < KINDA_PARALLEL)
+				continue;
+
+			//face from the same polygon
+			//NOTE: no need for convexness check when merging coplanar adjacent triangles, because a convex hull cannot have concave polygons anyway
+			PolygonalizeTraverser(pFace, currentPolygon, edge2face, face2edge);
+		}
+	}
 }
