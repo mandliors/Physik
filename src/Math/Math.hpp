@@ -8,7 +8,7 @@
 
 namespace Physik::Math
 {
-    void CalculateMassProperties(const Mesh &mesh, double density, Rigidbody::MassProperties &massProps);
+    void CalculateMassProperties(const TriangleMesh &mesh, double density, Rigidbody::MassProperties &massProps);
 
     void SolveCollidingContacts(std::vector<Contact> &contacts);
     void SolveRestingContacts(const std::vector<Contact> &restingContacts, double t);

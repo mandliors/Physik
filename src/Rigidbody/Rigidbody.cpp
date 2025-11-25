@@ -5,15 +5,15 @@ static Eigen::Quaterniond operator*(double v, const Eigen::Quaterniond &q);
 
 namespace Physik
 {
-	Rigidbody::Rigidbody(const Mesh &mesh, double density)
+	Rigidbody::Rigidbody(const TriangleMesh &triangleMesh, const PolygonMesh &polygonMesh, double density)
 		: state{
 			  Eigen::Vector3d(0.0, 0.0, 0.0),
 			  Eigen::Quaterniond(1.0, 0.0, 0.0, 0.0),
 			  Eigen::Vector3d(0.0, 0.0, 0.0),
 			  Eigen::Vector3d(0.0, 0.0, 0.0)},
-		  derived{Eigen::Matrix3d::Identity(), Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0)}, force{Eigen::Vector3d(0.0, 0.0, 0.0)}, torque{Eigen::Vector3d(0.0, 0.0, 0.0)}, mesh{mesh}
+		  derived{Eigen::Matrix3d::Identity(), Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0)}, force{Eigen::Vector3d(0.0, 0.0, 0.0)}, torque{Eigen::Vector3d(0.0, 0.0, 0.0)}, triangleMesh{triangleMesh}, polygonMesh{polygonMesh}
 	{
-		Math::CalculateMassProperties(mesh, density, constants);
+		Math::CalculateMassProperties(triangleMesh, density, constants);
 	}
 
 	void Rigidbody::CalculateDerivedQuantities()

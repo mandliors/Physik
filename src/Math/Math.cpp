@@ -5,7 +5,7 @@
 
 namespace Physik::Math
 {
-    void CalculateMassProperties(const Mesh &mesh, double density, Rigidbody::MassProperties &massProps)
+    void CalculateMassProperties(const TriangleMesh &mesh, double density, Rigidbody::MassProperties &massProps)
     {
         // small value to avoid division by zero
         static constexpr double DET_EPS = 1e-12;

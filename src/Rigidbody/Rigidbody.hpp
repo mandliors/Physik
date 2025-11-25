@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Mesh/Mesh.hpp"
+#include "Mesh/TriangleMesh.hpp"
+#include "Mesh/PolygonMesh.hpp"
 #include "Solvers/OdeSolver.hpp"
 
 #include <Eigen/Dense>
@@ -42,7 +43,7 @@ namespace Physik
 		};
 
 	public:
-		Rigidbody(const Mesh &mesh, double density);
+		Rigidbody(const TriangleMesh &triangleMesh, const PolygonMesh &polygonMesh, double density);
 
 		void CalculateDerivedQuantities();
 		StateDot CalculateStateDot() const;
@@ -62,6 +63,7 @@ namespace Physik
 		Eigen::Vector3d force;
 		Eigen::Vector3d torque;
 
-		Mesh mesh;
+		TriangleMesh triangleMesh;
+		PolygonMesh polygonMesh;
 	};
 }
