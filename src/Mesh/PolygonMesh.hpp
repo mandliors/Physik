@@ -1,17 +1,17 @@
 #pragma once
 
-#include <Eigen/Dense>
-
-#include <vector>
-#include <cstdint>
+#include "Mesh.hpp"
 
 namespace Physik
 {
-    struct PolygonMesh
+    class PolygonMesh : public Mesh
     {
-        static PolygonMesh CreateCube(double width, double height, double depth);
+    public:
+        PolygonMesh() = default;
+        PolygonMesh(const std::vector<Eigen::Vector3d> &vertices, const std::vector<std::vector<uint32_t>> &faces)
+            : Mesh(vertices, faces) {}
 
-        std::vector<Eigen::Vector3d> vertices;
-        std::vector<std::vector<uint32_t>> faces;
+    public:
+        static PolygonMesh CreateCube(double width, double height, double depth);
     };
 }

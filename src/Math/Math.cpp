@@ -21,7 +21,8 @@ namespace Physik::Math
             1.0 / 60.0,
             1.0 / 120.0,
             1.0 / 120.0,
-            1.0 / 120.0};
+            1.0 / 120.0,
+        };
 
         // array to hold the 10 integrals needed for mass properties
         auto integrals = std::array<double, 10>{0};
@@ -42,12 +43,14 @@ namespace Physik::Math
             g2 = f2 + w2 * (f1 + w2);
         };
 
+        const auto &vertices = mesh.GetVertices();
+
         // iterate over all faces to compute integrals
-        for (const auto &face : mesh.faces)
+        for (const auto &face : mesh.GetFaces())
         {
-            const auto &v0 = mesh.vertices[face[0]];
-            const auto &v1 = mesh.vertices[face[1]];
-            const auto &v2 = mesh.vertices[face[2]];
+            const auto &v0 = vertices[face[0]];
+            const auto &v1 = vertices[face[1]];
+            const auto &v2 = vertices[face[2]];
 
             const auto e1 = v1 - v0;
             const auto e2 = v2 - v0;

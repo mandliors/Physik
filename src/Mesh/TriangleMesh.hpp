@@ -1,17 +1,16 @@
 #pragma once
 
-#include <Eigen/Dense>
-
-#include <array>
-#include <cstdint>
+#include "Mesh.hpp"
 
 namespace Physik
 {
-    struct TriangleMesh
+    class TriangleMesh : public Mesh
     {
-        static TriangleMesh CreateCube(double width, double height, double depth);
+    public:
+        TriangleMesh() = default;
+        TriangleMesh(const std::vector<Eigen::Vector3d> &vertices, const std::vector<std::array<uint32_t, 3>> &faces);
 
-        std::vector<Eigen::Vector3d> vertices;
-        std::vector<std::array<uint32_t, 3>> faces;
+    public:
+        static TriangleMesh CreateCube(double width, double height, double depth);
     };
 }
