@@ -16,13 +16,14 @@ namespace Physik {
 		std::vector<long> triangles;		//a flattened array of integer triplets (mergeduplicates requires non-const field)
 		const Eigen::Vector3d center;		//average of the vertices
 
-	private:
 		std::vector<PolygonFace> polygons;
 
 	public:
 		ConvexHullCollider(const std::vector<Eigen::Vector3d>& vertices, const std::vector<long>& triangles);
 
 		void CalculateBoundingSphere();
+
+		ConvexHullConvexHullSeparatingAxis CalculateSeparatingAxis(const ConvexHullCollider& other);
 
 		//returns the separation distance
 		//the most segregating axis is written in outAxis, even if the colliders overlap

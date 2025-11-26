@@ -5,6 +5,31 @@
 
 namespace Physik {
 
+	ConvexHullConvexHullSeparatingAxis::ConvexHullConvexHullSeparatingAxis() :
+		BaseSeparatingAxis(nullptr, nullptr), isVertexFace(false)
+	{
+		eeInfo.aEdgeIndices[0] = 0; eeInfo.aEdgeIndices[1] = 0;
+		eeInfo.bEdgeIndices[0] = 0; eeInfo.bEdgeIndices[1] = 0;
+	}
+
+	ConvexHullConvexHullSeparatingAxis::ConvexHullConvexHullSeparatingAxis(const ConvexHullConvexHullSeparatingAxis& other)
+		: BaseSeparatingAxis(other)
+	{
+		if (other.isVertexFace)
+		{
+			this->isVertexFace = true;
+			this->vfInfo = other.vfInfo;
+		}
+		else
+		{
+			this->isVertexFace = false;
+			this->eeInfo.aEdgeIndices[0] = other.eeInfo.aEdgeIndices[0];
+			this->eeInfo.aEdgeIndices[1] = other.eeInfo.aEdgeIndices[1];
+			this->eeInfo.bEdgeIndices[0] = other.eeInfo.bEdgeIndices[0];
+			this->eeInfo.bEdgeIndices[1] = other.eeInfo.bEdgeIndices[1];
+		}
+	}
+
 	ConvexHullConvexHullSeparatingAxis::ConvexHullConvexHullSeparatingAxis(const ConvexHullCollider* a, const ConvexHullCollider* b,
 		const PolygonFace& aFace, int bVertexIndex) : BaseSeparatingAxis(dynamic_cast<const BaseCollider*>(a), dynamic_cast<const BaseCollider*>(b))
 	{
@@ -68,5 +93,24 @@ namespace Physik {
 			const ConvexHullCollider* a = dynamic_cast<const ConvexHullCollider*>(this->a);
 			return a->orientation * a->vertices[eeInfo.aEdgeIndices[0]] + a->position;
 		}
+	}
+
+	ConvexHullConvexHullSeparatingAxis& ConvexHullConvexHullSeparatingAxis::operator=(const ConvexHullConvexHullSeparatingAxis& other)
+	{
+		this->BaseSeparatingAxis::operator=(other);
+
+		if (other.isVertexFace)
+		{
+			this->isVertexFace = true;
+			this->vfInfo = other.vfInfo;
+		}
+		else
+		{
+			this->isVertexFace = false;
+			this->eeInfo = other.eeInfo;
+
+		}
+
+		return *this;
 	}
 }

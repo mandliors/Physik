@@ -12,4 +12,12 @@ namespace Physik {
 
 	BaseSeparatingAxis::~BaseSeparatingAxis()
 	{}
+
+	BaseSeparatingAxis& BaseSeparatingAxis::operator=(const BaseSeparatingAxis& other)
+	{
+		this->a = other.a;
+		this->b = other.b;
+
+		return *this;
+	}
 }

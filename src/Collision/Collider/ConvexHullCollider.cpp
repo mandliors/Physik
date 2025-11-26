@@ -5,8 +5,31 @@
 #include <float.h>
 
 namespace Physik {
-
+	//prototypes	----------------------------------------------------
 	Eigen::Vector3d CalculateCenterInternal(const std::vector<Eigen::Vector3d>& vertices);
+
+	bool GetAxisFromEdgesInternal(
+		const Eigen::Vector3d& a0, const Eigen::Vector3d& a1, const Eigen::Vector3d& b0, const Eigen::Vector3d& b1,
+		Eigen::Vector3d& outAxis);
+
+	double GetDeepestPenetrator(
+		const std::vector<Eigen::Vector3d>& transformedVertices,
+		const Eigen::Vector3d& axis, const Eigen::Vector3d& referencePoint,
+		int& deepestIndex);
+
+	double CalculateFaceVertexSeparatingAxisInternal(
+		const ConvexHullCollider* a, const ConvexHullCollider* b,
+		const std::vector<Eigen::Vector3d>& transformedVerticesA,
+		const std::vector<Eigen::Vector3d>& transformedVerticesB,
+		ConvexHullConvexHullSeparatingAxis& outAxis);
+
+	double CalculateEdgeEdgeSeparatingAxisInternal(
+		const ConvexHullCollider* a, const ConvexHullCollider* b,
+		const std::vector<Eigen::Vector3d>& transformedVerticesA,
+		const std::vector<Eigen::Vector3d>& transformedVerticesB,
+		ConvexHullConvexHullSeparatingAxis& outAxis);
+
+	//implementations	---------------------------------------------
 
 	ConvexHullCollider::ConvexHullCollider(const std::vector<Eigen::Vector3d>& vertices, const std::vector<long>& triangles)
 		:BaseCollider(), vertices(vertices), triangles(triangles), center(CalculateCenterInternal(vertices))
@@ -37,178 +60,129 @@ namespace Physik {
 		return center;
 	}
 
-	double CalculateAxisSeparation(
+	//SAT things	------------------------------------
+	ConvexHullConvexHullSeparatingAxis ConvexHullCollider::CalculateSeparatingAxis(const ConvexHullCollider& b)
+	{
+		std::vector<Eigen::Vector3d> transformedVerticesA;
+		std::vector<Eigen::Vector3d> transformedVerticesB;
+
+		ConvexHullConvexHullSeparatingAxis axisAB; double distanceAB;
+		ConvexHullConvexHullSeparatingAxis axisBA; double distanceBA;
+		ConvexHullConvexHullSeparatingAxis axisEdgeAB; double distanceEdgeAB;
+
+
+		//calculate transformed vertices
+		for (const Eigen::Vector3d& vertex : this->vertices)
+			transformedVerticesA.push_back(this->orientation * vertex + this->position);
+
+		for (const Eigen::Vector3d& vertex : b.vertices)
+			transformedVerticesB.push_back(b.orientation * vertex + b.position);
+
+		//get the separating axes
+		if (0 < CalculateFaceVertexSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisAB))
+			return axisAB;
+		if (0 < CalculateFaceVertexSeparatingAxisInternal(&b, this, transformedVerticesB, transformedVerticesA, axisBA))
+			return axisBA;
+		if (0 < CalculateEdgeEdgeSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisEdgeAB))
+			return axisEdgeAB;
+
+		return ConvexHullConvexHullSeparatingAxis();
+	}
+
+	//returns the axis with the maximum separation where the reference plane is given by a face of a
+	//returns DBL_MIN if no separating axis is found (in this case, outAxis is not overwritten)
+	double CalculateFaceVertexSeparatingAxisInternal(
+		const ConvexHullCollider* a, const ConvexHullCollider* b,
 		const std::vector<Eigen::Vector3d>& transformedVerticesA,
 		const std::vector<Eigen::Vector3d>& transformedVerticesB,
-		Eigen::Vector3d axis, int& closestIndexA, int& closestIndexB);
-
-	bool GetAxisFromEdgesInternal(
-		const Eigen::Vector3d& a0, const Eigen::Vector3d& a1, const Eigen::Vector3d& b0, const Eigen::Vector3d& b1,
-		Eigen::Vector3d& outAxis);
-
-	double ConvexHullCollider::FindSeparatingAxis(const ConvexHullCollider& other, ConvexHullConvexHullSeparatingAxis& outAxis)
+		ConvexHullConvexHullSeparatingAxis& outAxis)
 	{
-		std::vector<Eigen::Vector3d> verticesA, verticesB;	//transformed vertices
-		double maxSeparation = DBL_MIN;
 		ConvexHullConvexHullSeparatingAxis currentAxis;
+		double currentDistance = DBL_MIN;
 
-		if (this->triangles.size() == 0 || other.triangles.size() == 0)
-			return DBL_MIN;
-
-		//transform vertices
-		for (const auto& vertex : this->vertices)
-			verticesA.push_back(this->orientation * vertex + this->position);
-		for (const auto& vertex : other.vertices)
-			verticesB.push_back(other.orientation * vertex + other.position);
-
-		//check the face-vertex case
-		for (int i = 0; i < this->triangles.size(); i += 3)	//faces of collider A
+		for (const PolygonFace& face : a->polygons)
 		{
-			//calculate the axis die zur aktuellen Seite gehört
-			auto planeNormal = (verticesA[this->triangles[i + 2]] - verticesA[this->triangles[i + 1]]).cross(verticesA[this->triangles[i]] - verticesA[this->triangles[i + 1]]).normalized();
-			int closestIndexA = -1, closestIndexB = -1;
+			Eigen::Vector3d tempNormal =
+				(transformedVerticesA[face[2]] - transformedVerticesA[face[1]]).cross(
+					transformedVerticesA[face[0]] - transformedVerticesA[face[1]]
+				);
+			int penetratorIndex = -1;
+			double penetratorDistance = DBL_MAX;
 
-			//check if the axis is based
-			double separation = CalculateAxisSeparation(verticesA, verticesB, planeNormal, closestIndexA, closestIndexB);
-			if (separation > maxSeparation)
+			penetratorDistance = GetDeepestPenetrator(
+				transformedVerticesB,
+				tempNormal,
+				transformedVerticesA[face[0]],
+				penetratorIndex);
+
+			if (penetratorDistance > currentDistance)
 			{
-				maxSeparation = separation;
-				currentAxis = SeparatingAxis(&other, this, planeNormal, closestIndexB, i, i + 1, i + 2);
+				currentDistance = penetratorDistance;
+				currentAxis = ConvexHullConvexHullSeparatingAxis(a, b, face, penetratorIndex);
 			}
 		}
 
+		if (currentDistance > DBL_MIN)
+			outAxis = currentAxis;
+		return currentDistance;
+	}
 
-		for (int i = 0; i < other.triangles.size(); i += 3)	//faces of collider B
+	//returns the axis with the maximum separation where the reference plane is given by two gooners
+	//the axis power points from a to b
+	//returns DBL_MIN if no separating axis is found (in this case, outAxis is not overwritten)
+	double CalculateEdgeEdgeSeparatingAxisInternal(
+		const ConvexHullCollider* a, const ConvexHullCollider* b,
+		const std::vector<Eigen::Vector3d>& transformedVerticesA,
+		const std::vector<Eigen::Vector3d>& transformedVerticesB,
+		ConvexHullConvexHullSeparatingAxis& outAxis)
+	{
+		Eigen::Vector3d aCenterTransformed = a->orientation * a->center + a->position;
+		ConvexHullConvexHullSeparatingAxis currentAxis;
+		double currentDistance = DBL_MIN;
+
+		for (const PolygonFace& aFace : a->polygons)
 		{
-			//calculate the axis die zur aktuellen Seite gehört
-			auto planeNormal = (verticesB[other.triangles[i + 2]] - verticesB[other.triangles[i + 1]]).cross(verticesB[other.triangles[i]] - verticesB[other.triangles[i + 1]]).normalized();
-			int closestIndexA = -1, closestIndexB = -1;
-
-			//check if the axis is based
-			double separation = CalculateAxisSeparation(verticesA, verticesB, planeNormal, closestIndexA, closestIndexB);
-			if (separation > maxSeparation)
+			for (const PolygonFace& bFace : b->polygons)
 			{
-				maxSeparation = separation;
-				currentAxis = SeparatingAxis(this, &other, planeNormal, closestIndexA, i, i + 1, i + 2);
-			}
-		}
-
-		//check for the edging case
-		for (int i = 0; i < this->triangles.size(); i += 3)
-		{
-			Eigen::Vector3d edgesInFaceA[4];//neighbouring vertices make up a gooner
-			edgesInFaceA[0] = verticesA[this->triangles[i]];
-			edgesInFaceA[1] = verticesA[this->triangles[i + 1]];
-			edgesInFaceA[2] = verticesA[this->triangles[i + 2]];
-			edgesInFaceA[3] = verticesA[this->triangles[i]];
-
-			for (int j = 0; j < other.triangles.size(); j += 3)
-			{
-				Eigen::Vector3d edgesInFaceB[4];//neighbouring vertices make up a gooner
-				edgesInFaceB[0] = verticesB[other.triangles[j]];
-				edgesInFaceB[1] = verticesB[other.triangles[j + 1]];
-				edgesInFaceB[2] = verticesB[other.triangles[j + 2]];
-				edgesInFaceB[3] = verticesB[other.triangles[j]];
-
-				for (int k = 0; k < 9; k++)
+				for (int i = 0; i < aFace.size(); i++)	//edges in face a
 				{
-					int aIndex = k / 3;
-					int bIndex = k % 3;
-					Eigen::Vector3d axis;
-
-					if (GetAxisFromEdgesInternal(
-						edgesInFaceA[aIndex], edgesInFaceA[aIndex + 1],
-						edgesInFaceB[bIndex], edgesInFaceB[bIndex + 1],
-						axis))	//axis exists
+					for (int j = 0; j < bFace.size(); j++)	//edges in face b
 					{
-						int closestA, closestB;
-						double separation = CalculateAxisSeparation(verticesA, verticesB, axis, closestA, closestB);
-						if (separation > maxSeparation)
+						Eigen::Vector3d tempNormal;
+
+						//check if they can edge
+						if (!GetAxisFromEdgesInternal(
+							transformedVerticesA[aFace[i]], transformedVerticesA[aFace[(i + 1) % aFace.size()]],
+							transformedVerticesB[bFace[j]], transformedVerticesB[bFace[(j + 1) % bFace.size()]],
+							tempNormal
+						))
+							continue;
+
+						ConvexHullConvexHullSeparatingAxis tempAxis =
+							ConvexHullConvexHullSeparatingAxis(a, b, aFace[i], aFace[(i + 1) % aFace.size()], bFace[j], bFace[(j + 1) % bFace.size()]);
+
+						int nigga;
+						double maxDistance = GetDeepestPenetrator(transformedVerticesB, tempNormal, tempAxis.GetReferencePlanePoint(), nigga);
+
+						if (maxDistance > currentDistance)
 						{
-							maxSeparation = separation;
-							currentAxis = SeparatingAxis(
-								this, &other, axis,
-								this->triangles[i + aIndex], this->triangles[i + (aIndex + 1) % 3],
-								other.triangles[j + bIndex], other.triangles[j + (bIndex + 1) % 3], 69);
+							currentDistance = maxDistance;
+							currentAxis = tempAxis;
 						}
 					}
 				}
 			}
 		}
 
-		return maxSeparation;
-	}
-
-
-	//calculates if the colliders are actually separated along the axis
-	//returns the distance between the colliders along the axis (negative if there is a penetration)
-	double CalculateAxisSeparation(
-		const std::vector<Eigen::Vector3d>& transformedVerticesA,
-		const std::vector<Eigen::Vector3d>& transformedVerticesB,
-		Eigen::Vector3d axis, int& closestIndexA, int& closestIndexB)
-	{
-		double minA = DBL_MAX, maxA = DBL_MIN;
-		double minB = DBL_MAX, maxB = DBL_MIN;
-		int minIndexA = -1, maxIndexA = -1;
-		int minIndexB = -1, maxIndexB = -1;
-		auto normalizedAxis = axis.normalized();
-
-		if (transformedVerticesA.size() == 0 || transformedVerticesB.size() == 0)
-			return 0.0;
-
-		//calculate the min projection of the vertices in collider a
-		for (int i = 0; i < transformedVerticesA.size(); i++)
-		{
-			double proj = transformedVerticesA[i].dot(normalizedAxis);
-			if (proj < minA)
-			{
-				minA = proj;
-				minIndexA = i;
-			}
-			if (proj > maxA)
-			{
-				maxA = proj;
-				maxIndexA = i;
-			}
-		}
-
-		//calculate the min projection of the vertices in collider b
-		for (int i = 0; i < transformedVerticesB.size(); i++)
-		{
-			double proj = transformedVerticesB[i].dot(normalizedAxis);
-			if (proj < minB)
-			{
-				minB = proj;
-				minIndexB = i;
-			}
-			if (proj > maxB)
-			{
-				maxB = proj;
-				maxIndexB = i;
-			}
-		}
-
-		//calculate the separation
-		double separation = minB - maxA;
-		if (minA - maxB > separation)
-		{
-			separation = minA - maxB;
-			closestIndexA = minIndexA;
-			closestIndexB = maxIndexB;
-		}
-		else
-		{
-			closestIndexA = maxIndexA;
-			closestIndexB = minIndexB;
-		}
-
-		return separation;
+		if (currentDistance > DBL_MIN)
+			outAxis = currentAxis;
+		return currentDistance;
 	}
 
 	//returns false if there was no axis to be found (in this case, outAxis shall not be molested)
 	bool GetAxisFromEdgesInternal(
 		const Eigen::Vector3d& a0, const Eigen::Vector3d& a1, const Eigen::Vector3d& b0, const Eigen::Vector3d& b1,
-		Eigen::Vector3d& outAxis)
+		const Eigen::Vector3d& aCenter, Eigen::Vector3d& outAxis)
 	{
 		constexpr double MIN_VEC_SQRLENGTH = 0.0000001;
 		auto edgeA = a1 - a0;
@@ -220,7 +194,7 @@ namespace Physik {
 		if (edgeA.cross(edgeB).squaredNorm() < MIN_VEC_SQRLENGTH)//the edges are perfectly parallel
 		{
 			auto planeNormal = edgeB.cross(a0 - b0).cross(edgeB);
-			if (planeNormal.dot(a0 - b0) < 0)	//normal is pointing in the wrong direction
+			if (planeNormal.dot(a0 - aCenter) < 0)	//normal is pointing in the wrong direction
 				planeNormal = -planeNormal;
 
 			outAxis = planeNormal.normalized();
@@ -229,12 +203,38 @@ namespace Physik {
 		else
 		{
 			auto planeNormal = edgeA.cross(edgeB).normalized();
-			if (planeNormal.dot(a0 - b0) < 0)	//normal is pointing in the wrong direction
+			if (planeNormal.dot(a0 - aCenter) < 0)	//normal is pointing in the wrong direction
 				planeNormal = -planeNormal;
 
 			outAxis = planeNormal.normalized();
 			return true;
 		}
+	}
+
+	double GetDeepestPenetrator(
+		const std::vector<Eigen::Vector3d>& transformedVertices,
+		const Eigen::Vector3d& axis, const Eigen::Vector3d& referencePoint,
+		int& deepestIndex)
+	{
+		Eigen::Vector3d normAxis = axis.normalized();
+		double planeEquationConstant = -normAxis.dot(referencePoint);
+
+		int minIndex = -1;
+		int minDistance = DBL_MAX;
+
+		for (int i = 0; i < transformedVertices.size(); i++)
+		{
+			double distance = normAxis.dot(transformedVertices[i]) + planeEquationConstant;
+			if (distance < minDistance)
+			{
+				minIndex = i;
+				minDistance = distance;
+			}
+		}
+
+		if (minIndex != -1)
+			deepestIndex = minIndex;
+		return minDistance;
 	}
 
 

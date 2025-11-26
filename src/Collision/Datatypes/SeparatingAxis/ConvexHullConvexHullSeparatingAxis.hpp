@@ -23,6 +23,8 @@ namespace Physik {
 
 		ConvexHullConvexHullSeparatingAxis();
 
+		ConvexHullConvexHullSeparatingAxis(const ConvexHullConvexHullSeparatingAxis&);
+
 		ConvexHullConvexHullSeparatingAxis(const ConvexHullCollider* a, const ConvexHullCollider* b,
 			const PolygonFace& aFace, int bVertexIndex);
 
@@ -30,6 +32,8 @@ namespace Physik {
 			int ea0, int ea1, int eb0, int eb1);
 
 		~ConvexHullConvexHullSeparatingAxis();
+
+		ConvexHullConvexHullSeparatingAxis& operator=(const ConvexHullConvexHullSeparatingAxis& other);
 
 		Eigen::Vector3d GetAxisDir() const;
 		Eigen::Vector3d GetReferencePlanePoint() const;
