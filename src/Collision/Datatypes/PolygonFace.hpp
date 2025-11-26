@@ -6,13 +6,13 @@
 namespace Physik {
 	class PolygonFace {
 	private:
-		std::vector<Eigen::Vector3d> vertices;		//counter-clockwise
+		std::vector<int> vertexIndices;		//counter-clockwise
 
 	public:
-		PolygonFace(const std::vector<Eigen::Vector3d>& vertices);
+		PolygonFace(const std::vector<int>& vertexIndices);
 
 		int size() const;
 
-		Eigen::Vector3d& operator[](int index);
+		int operator[](int index) const;
 	};
 }

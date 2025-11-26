@@ -1,16 +1,16 @@
 #include "PolygonFace.hpp"
 
 namespace Physik {
-	PolygonFace::PolygonFace(const std::vector<Eigen::Vector3d>& vertices) : vertices(vertices)
+	PolygonFace::PolygonFace(const std::vector<int>& vertexIndices) : vertexIndices(vertexIndices)
 	{}
 
 	int PolygonFace::size() const
 	{
-		return vertices.size();
+		return vertexIndices.size();
 	}
 
-	Eigen::Vector3d& PolygonFace::operator[](int index)
+	int PolygonFace::operator[](int index) const
 	{
-		return vertices[index];
+		return vertexIndices[index];
 	}
 }

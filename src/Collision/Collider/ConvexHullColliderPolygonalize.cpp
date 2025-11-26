@@ -119,12 +119,12 @@ namespace Physik {
 		}
 
 		//switch the indices
-		std::map<long, Eigen::Vector3d*> prevIndexToVertex;
-		std::map<Eigen::Vector3d*, long> newVertexToIndex;
+		std::map<long, const Eigen::Vector3d*> prevIndexToVertex;
+		std::map<const Eigen::Vector3d*, long> newVertexToIndex;
 
 		for (int i = 0; i < sus.size(); i++)
 		{
-			Eigen::Vector3d* temp = &(vertices[sus[i].indices[0]]);
+			const Eigen::Vector3d* temp = &(vertices[sus[i].indices[0]]);
 			newVertexToIndex[temp] = sus[i].indices[0];
 			for (long j : sus[i].indices)
 				prevIndexToVertex[j] = temp;
@@ -215,10 +215,7 @@ namespace Physik {
 			if (polygonIndices.size() < 3)	//there is a gebasz here
 				continue;
 
-			std::vector<Eigen::Vector3d> polygonVertices;
-			for (int index : polygonIndices)
-				polygonVertices.push_back(vertices[index]);
-			polygons.push_back(PolygonFace(polygonVertices));
+			polygons.push_back(PolygonFace(polygonIndices));
 		}
 	}
 

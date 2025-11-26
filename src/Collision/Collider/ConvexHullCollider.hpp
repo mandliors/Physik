@@ -8,10 +8,13 @@
 
 namespace Physik {
 
-	class ConvexHullCollider : BaseCollider {
+	class ConvexHullConvexHullSeparatingAxis;
+
+	class ConvexHullCollider : public BaseCollider {
 	public:
-		std::vector<Eigen::Vector3d> vertices;
-		std::vector<long> triangles;	//a flattened array of integer triplets
+		const std::vector<Eigen::Vector3d> vertices;
+		std::vector<long> triangles;		//a flattened array of integer triplets (mergeduplicates requires non-const field)
+		const Eigen::Vector3d center;		//average of the vertices
 
 	private:
 		std::vector<PolygonFace> polygons;
@@ -24,7 +27,7 @@ namespace Physik {
 		//returns the separation distance
 		//the most segregating axis is written in outAxis, even if the colliders overlap
 		//if absolutely no axis is found, the return value is DBL_MIN
-		double FindSeparatingAxis(const ConvexHullCollider& other, BaseCollider::SeparatingAxis& outAxis);
+		double FindSeparatingAxis(const ConvexHullCollider& other, ConvexHullConvexHullSeparatingAxis& outAxis);
 
 	private:
 		//merges duplicate vertices

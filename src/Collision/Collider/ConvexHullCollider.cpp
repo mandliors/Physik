@@ -1,12 +1,15 @@
 #include "ConvexHullCollider.hpp"
+#include "../Datatypes/SeparatingAxis/ConvexHullConvexHullSeparatingAxis.hpp"
 
 #include <math.h>
 #include <float.h>
 
 namespace Physik {
 
+	Eigen::Vector3d CalculateCenterInternal(const std::vector<Eigen::Vector3d>& vertices);
+
 	ConvexHullCollider::ConvexHullCollider(const std::vector<Eigen::Vector3d>& vertices, const std::vector<long>& triangles)
-		:BaseCollider(), vertices(vertices), triangles(triangles)
+		:BaseCollider(), vertices(vertices), triangles(triangles), center(CalculateCenterInternal(vertices))
 	{
 		CalculateBoundingSphere();
 	}
@@ -24,6 +27,16 @@ namespace Physik {
 		bounds.radius = sqrt(maxSqrDistance);
 	}
 
+	Eigen::Vector3d CalculateCenterInternal(const std::vector<Eigen::Vector3d>& vertices)
+	{
+		Eigen::Vector3d center = Eigen::Vector3d(0, 0, 0);
+		for (const Eigen::Vector3d& vertex : vertices)
+			center += vertex;
+		if (vertices.size() > 0)
+			center /= (double)vertices.size();
+		return center;
+	}
+
 	double CalculateAxisSeparation(
 		const std::vector<Eigen::Vector3d>& transformedVerticesA,
 		const std::vector<Eigen::Vector3d>& transformedVerticesB,
@@ -33,11 +46,11 @@ namespace Physik {
 		const Eigen::Vector3d& a0, const Eigen::Vector3d& a1, const Eigen::Vector3d& b0, const Eigen::Vector3d& b1,
 		Eigen::Vector3d& outAxis);
 
-	double ConvexHullCollider::FindSeparatingAxis(const ConvexHullCollider& other, BaseCollider::SeparatingAxis& outPlane)
+	double ConvexHullCollider::FindSeparatingAxis(const ConvexHullCollider& other, ConvexHullConvexHullSeparatingAxis& outAxis)
 	{
 		std::vector<Eigen::Vector3d> verticesA, verticesB;	//transformed vertices
 		double maxSeparation = DBL_MIN;
-		BaseCollider::SeparatingAxis currentAxis;
+		ConvexHullConvexHullSeparatingAxis currentAxis;
 
 		if (this->triangles.size() == 0 || other.triangles.size() == 0)
 			return DBL_MIN;
