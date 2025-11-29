@@ -2,6 +2,7 @@
 
 #include "BaseCollider.hpp"
 #include "../Datatypes/PolygonFace.hpp"
+#include "../MeshContact.hpp"
 
 #include <vector>
 #include <Eigen/Dense>
@@ -30,7 +31,7 @@ namespace Physik {
 		//if absolutely no axis is found, the return value is DBL_MIN
 		double FindSeparatingAxis(const ConvexHullCollider& other, ConvexHullConvexHullSeparatingAxis& outAxis);
 
-		bool CollideWithConvexHull(const ConvexHullCollider& other, std::vector < Contan)
+		bool CollideWithConvexHull(const ConvexHullCollider& other, std::vector<MeshContact>& outContacts);
 
 	private:
 		//merges duplicate vertices
