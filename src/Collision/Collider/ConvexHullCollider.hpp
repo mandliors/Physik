@@ -30,6 +30,8 @@ namespace Physik {
 		//if absolutely no axis is found, the return value is DBL_MIN
 		double FindSeparatingAxis(const ConvexHullCollider& other, ConvexHullConvexHullSeparatingAxis& outAxis);
 
+		bool CollideWithConvexHull(const ConvexHullCollider& other, std::vector < Contan)
+
 	private:
 		//merges duplicate vertices
 		void MergeDuplicates();
