@@ -334,5 +334,83 @@ namespace Physik {
 		}
 
 		//simplify the contact manifold if necessary
+		if (contacts.size() > 4)
+		{
+			std::vector<MeshContact> prunedManifold;
+
+			//get the first point
+			//largest x coordinate, so that it is somewhat consistent between the frames
+			MeshContact& firstContact = contacts[0];
+			for (MeshContact& contact : contacts)
+				if (contact.point.x() > firstContact.point.x())
+					firstContact = contact;
+			prunedManifold.push_back(firstContact);
+
+			//get the second point
+			//this is the furthest one from the first
+			MeshContact& secondContact = contacts[0];
+			double furthestDistance = DBL_MIN;
+			for (MeshContact& contact : contacts)
+			{
+				double distance = (secondContact.point - firstContact.point).squaredNorm();
+				if (distance > furthestDistance)
+				{
+					secondContact = contact;
+					furthestDistance = distance;
+				}
+			}
+			prunedManifold.push_back(secondContact);
+
+			//get the third point
+			//it is the vertex that forms the largest area triangle with the previous 2 contact points
+			MeshContact& thirdContact = contacts[0];
+			double greatestArea = DBL_MIN;
+			for (MeshContact& contact : contacts)
+			{
+				//in wahrheit waere 0.5*|<(contact-prunedMan[0]) x (prunedMan[1]-prunedMan[0]); refPlaneNormal>|
+				//die Flaeche des Dreiecks, but the squared area (without the multiplication with 0.5) also suffices here
+				double area = abs((contact.point - prunedManifold[0].point).cross(prunedManifold[1].point - prunedManifold[0].point).dot(axis.GetAxisDir()));
+				if (area > greatestArea)
+				{
+					greatestArea = area;
+					thirdContact = contact;
+				}
+			}
+			prunedManifold.push_back(thirdContact);
+
+			//get the fourth point
+			//the 4th point is the one that forms the largest triangle with the 1st and 2nd point that doesn't overlap with the previous triangle
+			//if there is no such triangle, there is no need for a 4th point
+			const Eigen::Vector3d sideDecider = (prunedManifold[1].point - prunedManifold[0].point).cross(axis.GetAxisDir());
+			bool isOnPositiveSide = 0 > sideDecider.dot(prunedManifold[2].point - prunedManifold[0].point);
+
+			MeshContact& fourthContact = contacts[0];
+			greatestArea = DBL_MIN;
+			for (MeshContact& contact : contacts)
+			{
+				double side = (contact.point - prunedManifold[0].point).dot(sideDecider);
+				if ((side > 0 && isOnPositiveSide) || (side < 0 && !isOnPositiveSide))
+				{
+					double area = abs((contact.point - prunedManifold[0].point).cross(prunedManifold[1].point - prunedManifold[0].point).dot(axis.GetAxisDir()));
+					if (area > greatestArea)
+					{
+						greatestArea = area;
+						fourthContact = contact;
+					}
+				}
+			}
+			if (greatestArea != DBL_MIN)
+				prunedManifold.push_back(fourthContact);
+
+			//save the new manifold
+			contacts = prunedManifold;
+		}
+
+		//add the contact points (if there are any) to the outContactManifold vector
+		if (contacts.size() == 0)
+			return false;
+
+		outContactManifold.insert(outContactManifold.cend(), contacts.cbegin(), contacts.cend());
+		return true;
 	}
 }
