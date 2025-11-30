@@ -2,6 +2,7 @@
 
 #include "BaseCollider.hpp"
 #include "../Datatypes/PolygonFace.hpp"
+#include "../MeshContact.hpp"
 
 #include <vector>
 #include <Eigen/Dense>
@@ -23,12 +24,12 @@ namespace Physik {
 
 		void CalculateBoundingSphere();
 
-		ConvexHullConvexHullSeparatingAxis CalculateSeparatingAxis(const ConvexHullCollider& other);
-
 		//returns the separation distance
 		//the most segregating axis is written in outAxis, even if the colliders overlap
 		//if absolutely no axis is found, the return value is DBL_MIN
 		double FindSeparatingAxis(const ConvexHullCollider& other, ConvexHullConvexHullSeparatingAxis& outAxis);
+
+		bool CollideWithConvexHull(const ConvexHullCollider& other, std::vector<MeshContact>& outContactManifold);
 
 	private:
 		//merges duplicate vertices

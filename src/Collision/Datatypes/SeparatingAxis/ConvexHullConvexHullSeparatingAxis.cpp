@@ -113,4 +113,38 @@ namespace Physik {
 
 		return *this;
 	}
+
+	const PolygonFace& ConvexHullConvexHullSeparatingAxis::GetIncidentFace()
+	{
+		const ConvexHullCollider* b = dynamic_cast<const ConvexHullCollider*>(this->b);
+
+		double minDot = DBL_MAX;
+		int minFaceIndex = -1;
+		Eigen::Vector3d refPlaneNormal = GetAxisDir();
+
+		for (int i = 0; i < b->polygons.size(); i++)
+		{
+			const PolygonFace& face = b->polygons[i];
+
+			if (face.size() < 3)
+				continue;
+
+			Eigen::Vector3d normal =
+				(b->vertices[face[2]] - b->vertices[face[1]])
+				.cross(b->vertices[face[0]] - b->vertices[face[1]])
+				.normalized();
+
+			double dot = normal.dot(refPlaneNormal);
+			if (dot < minDot)
+			{
+				minDot = dot;
+				minFaceIndex = i;
+			}
+		}
+
+		if (minFaceIndex == -1)
+			throw "Collider must have at least 1 polygon with a vertex count of at least 3";
+
+		return b->polygons[minFaceIndex];
+	}
 }

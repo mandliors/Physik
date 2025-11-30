@@ -35,7 +35,9 @@ namespace Physik {
 
 		ConvexHullConvexHullSeparatingAxis& operator=(const ConvexHullConvexHullSeparatingAxis& other);
 
-		Eigen::Vector3d GetAxisDir() const;
+		Eigen::Vector3d GetAxisDir() const;	//returns the normalized axis direction
 		Eigen::Vector3d GetReferencePlanePoint() const;
+
+		const PolygonFace& GetIncidentFace();
 	};
 }

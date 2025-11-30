@@ -1,5 +1,6 @@
 #include "ConvexHullCollider.hpp"
 #include "../Datatypes/SeparatingAxis/ConvexHullConvexHullSeparatingAxis.hpp"
+#include "../../Math/LinAlg.hpp"
 
 #include <math.h>
 #include <float.h>
@@ -61,7 +62,7 @@ namespace Physik {
 	}
 
 	//SAT things	------------------------------------
-	ConvexHullConvexHullSeparatingAxis ConvexHullCollider::CalculateSeparatingAxis(const ConvexHullCollider& b)
+	double ConvexHullCollider::FindSeparatingAxis(const ConvexHullCollider& b, ConvexHullConvexHullSeparatingAxis& outAxis)
 	{
 		std::vector<Eigen::Vector3d> transformedVerticesA;
 		std::vector<Eigen::Vector3d> transformedVerticesB;
@@ -79,14 +80,27 @@ namespace Physik {
 			transformedVerticesB.push_back(b.orientation * vertex + b.position);
 
 		//get the separating axes
-		if (0 < CalculateFaceVertexSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisAB))
-			return axisAB;
-		if (0 < CalculateFaceVertexSeparatingAxisInternal(&b, this, transformedVerticesB, transformedVerticesA, axisBA))
-			return axisBA;
-		if (0 < CalculateEdgeEdgeSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisEdgeAB))
-			return axisEdgeAB;
+		CalculateFaceVertexSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisAB);
+		CalculateFaceVertexSeparatingAxisInternal(&b, this, transformedVerticesB, transformedVerticesA, axisBA);
+		CalculateEdgeEdgeSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisEdgeAB);
 
-		return ConvexHullConvexHullSeparatingAxis();
+		ConvexHullConvexHullSeparatingAxis& maxAxis = axisAB;
+		double maxDistance = distanceAB;
+
+		if (distanceBA > maxDistance)
+		{
+			maxAxis = axisBA;
+			maxDistance = distanceBA;
+		}
+		if (distanceEdgeAB > maxDistance)
+		{
+			maxAxis = axisEdgeAB;
+			maxDistance = distanceEdgeAB;
+		}
+
+		if (maxDistance != DBL_MIN)
+			outAxis = maxAxis;
+		return maxDistance;
 	}
 
 	//returns the axis with the maximum separation where the reference plane is given by a face of a
@@ -238,4 +252,165 @@ namespace Physik {
 	}
 
 
+	//collisions ----------------------------------------------
+
+	bool ConvexHullCollider::CollideWithConvexHull(const ConvexHullCollider& other, std::vector<MeshContact>& outContactManifold)
+	{
+		ConvexHullConvexHullSeparatingAxis axis;
+		LinAlg::Plane referencePlane(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
+
+		std::vector<MeshContact> contacts;
+
+		//get separating axis
+		double separation = FindSeparatingAxis(other, axis);
+		if (DBL_MIN == separation)	//axis doesnt exist
+			return false;
+		if (separation >= 0)	//no collision
+			return false;
+
+		//handle edging and gooning separately
+		if (axis.isVertexFace)
+		{
+			const ConvexHullCollider* a = dynamic_cast<const ConvexHullCollider*>(axis.a);
+			const ConvexHullCollider* b = dynamic_cast<const ConvexHullCollider*>(axis.b);
+
+			const PolygonFace& incidentFace = axis.GetIncidentFace();
+
+			std::vector<LinAlg::Plane> referenceFaceSidePlanes;		//the sides planes of the reference face
+			std::vector<LinAlg::LineSegment> incidentFaceEdges;		//transformed incident face edges
+
+
+			//calculate the reference face side planes
+			for (int i = 0; i < axis.vfInfo.face.size(); i++)
+			{
+				Eigen::Vector3d edgeA = a->orientation * a->vertices[axis.vfInfo.face[i]] + a->position;
+				Eigen::Vector3d edgeB = a->orientation * a->vertices[axis.vfInfo.face[i + 1]] + a->position;
+
+				Eigen::Vector3d sidePlaneNormal = axis.GetAxisDir().cross(edgeB - edgeA);
+				referenceFaceSidePlanes.push_back(LinAlg::Plane(edgeA, sidePlaneNormal));
+			}
+
+			//calculate the incident face edges
+			for (int i = 0; i < incidentFace.size(); i++)
+				incidentFaceEdges.push_back(LinAlg::LineSegment(
+					b->orientation * b->vertices[incidentFace[i]] + b->position,
+					b->orientation * b->vertices[incidentFace[i + 1]] + b->position));
+
+			//clip the incident edges against the reference side planes
+			for (const LinAlg::LineSegment& edge : incidentFaceEdges)
+			{
+				for (const LinAlg::Plane& plane : referenceFaceSidePlanes)
+				{
+					Eigen::Vector3d contactPoint;
+					if (LinAlg::Plane::IntersectWithLineSegment(plane, edge, contactPoint))//intersection between the edge and the reference plane
+						contacts.push_back(MeshContact(a, b, contactPoint, axis.GetAxisDir()));
+				}
+			}
+		}
+		else
+		{
+			const ConvexHullCollider* a = dynamic_cast<const ConvexHullCollider*>(axis.a);
+			const ConvexHullCollider* b = dynamic_cast<const ConvexHullCollider*>(axis.b);
+
+			LinAlg::LineSegment edgeA = LinAlg::LineSegment(
+				a->orientation * a->vertices[axis.eeInfo.aEdgeIndices[1]] + a->position,
+				a->orientation * a->vertices[axis.eeInfo.aEdgeIndices[0]] + a->position
+			);
+			LinAlg::LineSegment edgeB = LinAlg::LineSegment(
+				b->orientation * b->vertices[axis.eeInfo.bEdgeIndices[1]] + b->position,
+				b->orientation * b->vertices[axis.eeInfo.bEdgeIndices[0]] + b->position
+			);
+
+			LinAlg::Plane referencePlane(axis.GetReferencePlanePoint(), axis.GetAxisDir());
+
+			//project the edges onto the reference plane
+			edgeA = edgeA.ProjectOntoPlane(referencePlane);
+			edgeB = edgeB.ProjectOntoPlane(referencePlane);
+
+			//get the contact point
+			Eigen::Vector3d contactPoint;
+			if (LinAlg::LineSegment::IntersectWithLineSegment(edgeA, edgeB, contactPoint))
+				contacts.push_back(MeshContact(a, b, contactPoint, axis.GetAxisDir()));
+		}
+
+		//simplify the contact manifold if necessary
+		if (contacts.size() > 4)
+		{
+			std::vector<MeshContact> prunedManifold;
+
+			//get the first point
+			//largest x coordinate, so that it is somewhat consistent between the frames
+			MeshContact& firstContact = contacts[0];
+			for (MeshContact& contact : contacts)
+				if (contact.point.x() > firstContact.point.x())
+					firstContact = contact;
+			prunedManifold.push_back(firstContact);
+
+			//get the second point
+			//this is the furthest one from the first
+			MeshContact& secondContact = contacts[0];
+			double furthestDistance = DBL_MIN;
+			for (MeshContact& contact : contacts)
+			{
+				double distance = (secondContact.point - firstContact.point).squaredNorm();
+				if (distance > furthestDistance)
+				{
+					secondContact = contact;
+					furthestDistance = distance;
+				}
+			}
+			prunedManifold.push_back(secondContact);
+
+			//get the third point
+			//it is the vertex that forms the largest area triangle with the previous 2 contact points
+			MeshContact& thirdContact = contacts[0];
+			double greatestArea = DBL_MIN;
+			for (MeshContact& contact : contacts)
+			{
+				//in wahrheit waere 0.5*|<(contact-prunedMan[0]) x (prunedMan[1]-prunedMan[0]); refPlaneNormal>|
+				//die Flaeche des Dreiecks, but the squared area (without the multiplication with 0.5) also suffices here
+				double area = abs((contact.point - prunedManifold[0].point).cross(prunedManifold[1].point - prunedManifold[0].point).dot(axis.GetAxisDir()));
+				if (area > greatestArea)
+				{
+					greatestArea = area;
+					thirdContact = contact;
+				}
+			}
+			prunedManifold.push_back(thirdContact);
+
+			//get the fourth point
+			//the 4th point is the one that forms the largest triangle with the 1st and 2nd point that doesn't overlap with the previous triangle
+			//if there is no such triangle, there is no need for a 4th point
+			const Eigen::Vector3d sideDecider = (prunedManifold[1].point - prunedManifold[0].point).cross(axis.GetAxisDir());
+			bool isOnPositiveSide = 0 > sideDecider.dot(prunedManifold[2].point - prunedManifold[0].point);
+
+			MeshContact& fourthContact = contacts[0];
+			greatestArea = DBL_MIN;
+			for (MeshContact& contact : contacts)
+			{
+				double side = (contact.point - prunedManifold[0].point).dot(sideDecider);
+				if ((side > 0 && isOnPositiveSide) || (side < 0 && !isOnPositiveSide))
+				{
+					double area = abs((contact.point - prunedManifold[0].point).cross(prunedManifold[1].point - prunedManifold[0].point).dot(axis.GetAxisDir()));
+					if (area > greatestArea)
+					{
+						greatestArea = area;
+						fourthContact = contact;
+					}
+				}
+			}
+			if (greatestArea != DBL_MIN)
+				prunedManifold.push_back(fourthContact);
+
+			//save the new manifold
+			contacts = prunedManifold;
+		}
+
+		//add the contact points (if there are any) to the outContactManifold vector
+		if (contacts.size() == 0)
+			return false;
+
+		outContactManifold.insert(outContactManifold.cend(), contacts.cbegin(), contacts.cend());
+		return true;
+	}
 }

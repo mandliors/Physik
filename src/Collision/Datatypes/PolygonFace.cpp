@@ -11,6 +11,6 @@ namespace Physik {
 
 	int PolygonFace::operator[](int index) const
 	{
-		return vertexIndices[index];
+		return vertexIndices[index % size()];
 	}
 }
