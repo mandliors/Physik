@@ -1,5 +1,6 @@
 #include "ConvexHullCollider.hpp"
 #include "../Datatypes/SeparatingAxis/ConvexHullConvexHullSeparatingAxis.hpp"
+#include "../../Math/LinAlg.hpp"
 
 #include <math.h>
 #include <float.h>
@@ -61,7 +62,7 @@ namespace Physik {
 	}
 
 	//SAT things	------------------------------------
-	ConvexHullConvexHullSeparatingAxis ConvexHullCollider::CalculateSeparatingAxis(const ConvexHullCollider& b)
+	double ConvexHullCollider::FindSeparatingAxis(const ConvexHullCollider& b, ConvexHullConvexHullSeparatingAxis& outAxis)
 	{
 		std::vector<Eigen::Vector3d> transformedVerticesA;
 		std::vector<Eigen::Vector3d> transformedVerticesB;
@@ -79,14 +80,27 @@ namespace Physik {
 			transformedVerticesB.push_back(b.orientation * vertex + b.position);
 
 		//get the separating axes
-		if (0 < CalculateFaceVertexSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisAB))
-			return axisAB;
-		if (0 < CalculateFaceVertexSeparatingAxisInternal(&b, this, transformedVerticesB, transformedVerticesA, axisBA))
-			return axisBA;
-		if (0 < CalculateEdgeEdgeSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisEdgeAB))
-			return axisEdgeAB;
+		CalculateFaceVertexSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisAB);
+		CalculateFaceVertexSeparatingAxisInternal(&b, this, transformedVerticesB, transformedVerticesA, axisBA);
+		CalculateEdgeEdgeSeparatingAxisInternal(this, &b, transformedVerticesA, transformedVerticesB, axisEdgeAB);
 
-		return ConvexHullConvexHullSeparatingAxis();
+		ConvexHullConvexHullSeparatingAxis& maxAxis = axisAB;
+		double maxDistance = distanceAB;
+
+		if (distanceBA > maxDistance)
+		{
+			maxAxis = axisBA;
+			maxDistance = distanceBA;
+		}
+		if (distanceEdgeAB > maxDistance)
+		{
+			maxAxis = axisEdgeAB;
+			maxDistance = distanceEdgeAB;
+		}
+
+		if (maxDistance != DBL_MIN)
+			outAxis = maxAxis;
+		return maxDistance;
 	}
 
 	//returns the axis with the maximum separation where the reference plane is given by a face of a
@@ -238,4 +252,87 @@ namespace Physik {
 	}
 
 
+	//collisions ----------------------------------------------
+
+	bool ConvexHullCollider::CollideWithConvexHull(const ConvexHullCollider& other, std::vector<MeshContact>& outContactManifold)
+	{
+		ConvexHullConvexHullSeparatingAxis axis;
+		LinAlg::Plane referencePlane(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
+
+		std::vector<MeshContact> contacts;
+
+		//get separating axis
+		double separation = FindSeparatingAxis(other, axis);
+		if (DBL_MIN == separation)	//axis doesnt exist
+			return false;
+		if (separation >= 0)	//no collision
+			return false;
+
+		//handle edging and gooning separately
+		if (axis.isVertexFace)
+		{
+			const ConvexHullCollider* a = dynamic_cast<const ConvexHullCollider*>(axis.a);
+			const ConvexHullCollider* b = dynamic_cast<const ConvexHullCollider*>(axis.b);
+
+			const PolygonFace& incidentFace = axis.GetIncidentFace();
+
+			std::vector<LinAlg::Plane> referenceFaceSidePlanes;		//the sides planes of the reference face
+			std::vector<LinAlg::LineSegment> incidentFaceEdges;		//transformed incident face edges
+
+
+			//calculate the reference face side planes
+			for (int i = 0; i < axis.vfInfo.face.size(); i++)
+			{
+				Eigen::Vector3d edgeA = a->orientation * a->vertices[axis.vfInfo.face[i]] + a->position;
+				Eigen::Vector3d edgeB = a->orientation * a->vertices[axis.vfInfo.face[i + 1]] + a->position;
+
+				Eigen::Vector3d sidePlaneNormal = axis.GetAxisDir().cross(edgeB - edgeA);
+				referenceFaceSidePlanes.push_back(LinAlg::Plane(edgeA, sidePlaneNormal));
+			}
+
+			//calculate the incident face edges
+			for (int i = 0; i < incidentFace.size(); i++)
+				incidentFaceEdges.push_back(LinAlg::LineSegment(
+					b->orientation * b->vertices[incidentFace[i]] + b->position,
+					b->orientation * b->vertices[incidentFace[i + 1]] + b->position));
+
+			//clip the incident edges against the reference side planes
+			for (const LinAlg::LineSegment& edge : incidentFaceEdges)
+			{
+				for (const LinAlg::Plane& plane : referenceFaceSidePlanes)
+				{
+					Eigen::Vector3d contactPoint;
+					if (LinAlg::Plane::IntersectWithLineSegment(plane, edge, contactPoint))//intersection between the edge and the reference plane
+						contacts.push_back(MeshContact(a, b, contactPoint, axis.GetAxisDir()));
+				}
+			}
+		}
+		else
+		{
+			const ConvexHullCollider* a = dynamic_cast<const ConvexHullCollider*>(axis.a);
+			const ConvexHullCollider* b = dynamic_cast<const ConvexHullCollider*>(axis.b);
+
+			LinAlg::LineSegment edgeA = LinAlg::LineSegment(
+				a->orientation * a->vertices[axis.eeInfo.aEdgeIndices[1]] + a->position,
+				a->orientation * a->vertices[axis.eeInfo.aEdgeIndices[0]] + a->position
+			);
+			LinAlg::LineSegment edgeB = LinAlg::LineSegment(
+				b->orientation * b->vertices[axis.eeInfo.bEdgeIndices[1]] + b->position,
+				b->orientation * b->vertices[axis.eeInfo.bEdgeIndices[0]] + b->position
+			);
+
+			LinAlg::Plane referencePlane(axis.GetReferencePlanePoint(), axis.GetAxisDir());
+
+			//project the edges onto the reference plane
+			edgeA = edgeA.ProjectOntoPlane(referencePlane);
+			edgeB = edgeB.ProjectOntoPlane(referencePlane);
+
+			//get the contact point
+			Eigen::Vector3d contactPoint;
+			if (LinAlg::LineSegment::IntersectWithLineSegment(edgeA, edgeB, contactPoint))
+				contacts.push_back(MeshContact(a, b, contactPoint, axis.GetAxisDir()));
+		}
+
+		//simplify the contact manifold if necessary
+	}
 }

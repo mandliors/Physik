@@ -8,7 +8,7 @@ namespace LinAlg {
 
 	class LineSegment {
 	public:
-		const Eigen::Vector3d pointA, pointB;
+		Eigen::Vector3d pointA, pointB;
 
 		LineSegment(const Eigen::Vector3d& pointA, const Eigen::Vector3d& pointB);
 
@@ -20,10 +20,12 @@ namespace LinAlg {
 
 	class Plane {
 	public:
-		const Eigen::Vector3d point;
-		const Eigen::Vector3d normal;	//normalized automatically
+		Eigen::Vector3d point;
+		Eigen::Vector3d normal;	//normalized automatically
 
 		Plane(const Eigen::Vector3d& point, const Eigen::Vector3d& normal);
+
+		Plane& operator=(const Plane& other);
 
 		Eigen::Vector3d PointProjection(const Eigen::Vector3d& point) const;
 

@@ -44,6 +44,14 @@ namespace LinAlg {
 		:point(point), normal(normal.normalized())
 	{}
 
+	Plane& Plane::operator=(const Plane& other)
+	{
+		this->point = other.point;
+		this->normal = other.normal;
+
+		return *this;
+	}
+
 	Vector3d Plane::PointProjection(const Vector3d& point) const
 	{
 		return point - (normal.dot(point - this->point)) * normal;

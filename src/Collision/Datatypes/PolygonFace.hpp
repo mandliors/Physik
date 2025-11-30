@@ -13,6 +13,6 @@ namespace Physik {
 
 		int size() const;
 
-		int operator[](int index) const;
+		int operator[](int index) const;	//vertexIndices[index%size()]
 	};
 }
